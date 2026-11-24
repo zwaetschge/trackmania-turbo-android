@@ -1,0 +1,130 @@
+From 7e218e6594c773e21862fba1fd8ff8766a757fa4 Mon Sep 17 00:00:00 2001
+From: tm-port <tm-port@localhost>
+Date: Tue, 10 Nov 2026 20:41:42 +0100
+Subject: [PATCH 21/21] lift32: sar on 8/16-bit operands replicates the
+ operand's own sign bit; cwd writes DX only; recomp32: RECOMP_LOCAL_STATE
+ (trackmania-port)
+
+sar r/m8 and r/m16 were lifted as (int32_t)<unsigned narrow value> >> n, i.e. a logical
+shift. The MSVC CRT classifies x87 operands with fxam; fnstsw; shl cl,1; sar cl,1;
+rol cl,1; xlatb, so every zero argument of atan2/pow/fmod/exp looked unsupported and the
+function returned NaN; 16-bit codec arithmetic was wrong for negative values.
+
+RECOMP_LOCAL_STATE keeps the state pointer and the guest memory base in locals of each
+lifted function (recomp_local_state.h switches RECOMP_CPU and ADDR after the host's last
+inline helper): the compiler had to reload both after every guest store, a fifth of the
+instructions in hot functions.
+---
+ runtime/recomp32/recomp_local_state.h | 16 ++++++++++++++++
+ runtime/recomp32/recomp_types.h       | 21 ++++++++++++++++++---
+ tools/lift/lift32.py                  | 19 ++++++++++++++++---
+ 3 files changed, 50 insertions(+), 6 deletions(-)
+ create mode 100644 runtime/recomp32/recomp_local_state.h
+
+diff --git a/runtime/recomp32/recomp_local_state.h b/runtime/recomp32/recomp_local_state.h
+new file mode 100644
+index 0000000..0e2e767
+--- /dev/null
++++ b/runtime/recomp32/recomp_local_state.h
+@@ -0,0 +1,16 @@
++/*
++ * recomp_local_state.h - switch lifted function bodies to their local copies of the
++ * state pointer and the guest memory base (RECOMP_LOCAL_STATE, see recomp_types.h).
++ *
++ * Include this AFTER the last inline helper function a translation unit defines:
++ * helpers have no such locals and keep the global forms they were parsed with.
++ */
++#if defined(RECOMP_LOCAL_STATE) && defined(RECOMP_GENERATED_CODE) && defined(RECOMP_CPU_STRUCT) && !defined(RECOMP_LOCAL_STATE_ON)
++#define RECOMP_LOCAL_STATE_ON
++#undef RECOMP_CPU
++#define RECOMP_CPU _cpu
++#ifndef RECOMP_FLAT_MEMORY
++#undef ADDR
++#define ADDR(va) ((uintptr_t)(uint32_t)(va) + _mb)
++#endif
++#endif
+diff --git a/runtime/recomp32/recomp_types.h b/runtime/recomp32/recomp_types.h
+index 886a9d0..a310097 100644
+--- a/runtime/recomp32/recomp_types.h
++++ b/runtime/recomp32/recomp_types.h
+@@ -85,11 +85,14 @@ static inline __attribute__((always_inline)) recomp_cpu_t *recomp_cpu_get(void)
+ static inline void recomp_cpu_set(recomp_cpu_t *c) {
+     ((void **)__builtin_thread_pointer())[RECOMP_CPU_TLS_SLOT] = c;
+ }
+-#define RECOMP_CPU recomp_cpu_get()
++#define RECOMP_CPU_GLOBAL recomp_cpu_get()
+ #else
+ extern RECOMP_TLS recomp_cpu_t g_cpu;
+-#define RECOMP_CPU (&g_cpu)
++#define RECOMP_CPU_GLOBAL (&g_cpu)
+ #endif
++/* RECOMP_CPU is what every g_* name goes through. Lifted function bodies can switch it
++ * to a local copy of the pointer, see RECOMP_LOCAL_STATE below. */
++#define RECOMP_CPU RECOMP_CPU_GLOBAL
+ #define g_eax (RECOMP_CPU->c_eax)
+ #define g_ecx (RECOMP_CPU->c_ecx)
+ #define g_edx (RECOMP_CPU->c_edx)
+@@ -229,7 +232,19 @@ extern const uint32_t recomp_dispatch_count;
+ #define esi l_esi
+ #define edi l_edi
+ #define ebp l_ebp
+-#define RECOMP_REGS_LOCALS uint32_t l_eax = g_eax, l_ecx = g_ecx, l_edx = g_edx, l_ebx = g_ebx, l_esp = g_esp, l_esi = g_esi, l_edi = g_edi, l_ebp = g_ebp;
++/* RECOMP_LOCAL_STATE (trackmania-port, needs RECOMP_CPU_STRUCT): each lifted function
++ * also keeps the state pointer and the guest memory base in locals. Both are fixed for
++ * the life of a thread, but the compiler cannot know that: a store to guest memory may
++ * alias either of them, so it reloaded the base after every guest store and the state
++ * pointer before every register write-back -- a fifth of all instructions in
++ * Trackmania's hot functions. The host includes recomp_local_state.h after its last
++ * inline helper; from there on RECOMP_CPU and ADDR() use the locals. */
++#ifdef RECOMP_LOCAL_STATE
++#define RECOMP_STATE_LOCALS recomp_cpu_t *const _cpu = RECOMP_CPU_GLOBAL; const uintptr_t _mb = (uintptr_t)g_mem_base;
++#else
++#define RECOMP_STATE_LOCALS
++#endif
++#define RECOMP_REGS_LOCALS RECOMP_STATE_LOCALS uint32_t l_eax = g_eax, l_ecx = g_ecx, l_edx = g_edx, l_ebx = g_ebx, l_esp = g_esp, l_esi = g_esi, l_edi = g_edi, l_ebp = g_ebp;
+ #define RECOMP_REGS_OUT() (g_eax = l_eax, g_ecx = l_ecx, g_edx = l_edx, g_ebx = l_ebx, g_esp = l_esp, g_esi = l_esi, g_edi = l_edi, g_ebp = l_ebp)
+ #define RECOMP_REGS_IN() (l_eax = g_eax, l_ecx = g_ecx, l_edx = g_edx, l_ebx = g_ebx, l_esp = g_esp, l_esi = g_esi, l_edi = g_edi, l_ebp = g_ebp)
+ #else
+diff --git a/tools/lift/lift32.py b/tools/lift/lift32.py
+index 8a20ab3..af81147 100644
+--- a/tools/lift/lift32.py
++++ b/tools/lift/lift32.py
+@@ -1140,11 +1140,23 @@ class Lifter:
+                 a = self._fmt_read(ops[0])
+                 b, bn = self._shift_count(ops[1])
+                 w = op_bits(ops[0])
+-                res = f"((uint32_t)((int32_t){a} >> {b}))"
++                # The operand's own sign bit is what gets replicated. An 8- or
++                # 16-bit operand reads as an unsigned value here, so a plain
++                # (int32_t) cast shifted zeros in: `sar cl, 1` behaved like
++                # `shr cl, 1`. The MSVC CRT classifies x87 operands with
++                # `fxam; fnstsw; shl cl,1; sar cl,1; rol cl,1; xlatb` -- the sar
++                # copies C3 -- so every ZERO argument of atan2/pow/fmod/exp was
++                # taken for an unsupported number and the function returned NaN
++                # (Trackmania Turbo: the engine-sound synthesiser, the telemetry
++                # angles); codecs with 16-bit arithmetic were wrong for negative
++                # values.
++                sa = (f"(int32_t)(int8_t)({a})" if w == 8 else
++                      f"(int32_t)(int16_t)({a})" if w == 16 else f"(int32_t){a}")
++                res = f"((uint32_t)({sa} >> {b}))"
+                 # sar must publish CF for a following rcr (the clip's `sar;rcr` lerp).
+                 lines.append(f"if ({b}) _cf = {self._shift_out_cf(a, b, bn, w, 'arith')}; {comment}")
+                 lines.append(self._shift_flags(res, b, w))
+-                lines.append(f"{self._fmt_write(ops[0], f'(uint32_t)((int32_t){a} >> {b})')};")
++                lines.append(f"{self._fmt_write(ops[0], f'(uint32_t)({sa} >> {b})')};")
+                 self._flag_state = None
+ 
+         # shld/shrd: double-precision shift (64-bit window across dst:src). Used pervasively
+@@ -1994,7 +2006,8 @@ class Lifter:
+             lines.append(f"eax = (uint32_t)(int32_t)(int16_t)LO16(eax); {comment}")
+ 
+         elif m == 'cwd':
+-            lines.append(f"edx = ((int16_t)LO16(eax) < 0) ? 0xFFFFu : 0; {comment}")
++            # DX only: the upper half of EDX stays.
++            lines.append(f"SET_LO16(edx, ((int16_t)LO16(eax) < 0) ? 0xFFFFu : 0u); {comment}")
+ 
+         elif m == 'cbw':
+             lines.append(f"SET_LO16(eax, (uint16_t)(int16_t)(int8_t)LO8(eax)); {comment}")
+-- 
+2.54.0
+

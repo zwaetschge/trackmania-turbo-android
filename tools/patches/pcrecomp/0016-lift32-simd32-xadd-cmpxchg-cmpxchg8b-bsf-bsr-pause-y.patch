@@ -1,0 +1,106 @@
+From f62c600a73c1a14631288496672ffd6fe24809c0 Mon Sep 17 00:00:00 2001
+From: port <x@y>
+Date: Mon, 9 Nov 2026 19:52:00 +0100
+Subject: [PATCH 16/21] lift32/simd32: xadd, cmpxchg, cmpxchg8b, bsf/bsr, pause
+ yield, pmuludq, fcomi family (trackmania-port)
+
+---
+ tools/lift/lift32.py | 55 ++++++++++++++++++++++++++++++++++++++++++++
+ tools/lift/simd32.py |  8 ++++++-
+ 2 files changed, 62 insertions(+), 1 deletion(-)
+
+diff --git a/tools/lift/lift32.py b/tools/lift/lift32.py
+index 1cd9bf5..3366124 100644
+--- a/tools/lift/lift32.py
++++ b/tools/lift/lift32.py
+@@ -801,6 +801,61 @@ class Lifter:
+                 addr = self._fmt_lea(ops[1].mem)
+                 lines.append(f"{self._fmt_write(ops[0], addr)}; {comment}")
+ 
++        # --- trackmania-port additions: atomics (exact under the machine
++        # lock), bit scans, spin-wait hint, x87 compares into EFLAGS ---
++        elif m == 'xadd' and len(ops) == 2:
++            a = self._fmt_read(ops[0]); b = self._fmt_read(ops[1])
++            lines.append(f"{{ uint32_t _xd = {a}, _xs = {b}; {comment}")
++            lines.append("  " + self._flag_capture("_xd", "_xs", op_bits(ops[0])))
++            lines.append("  _cf = (uint32_t)((uint32_t)(_flag_a + _flag_b) < (uint32_t)_flag_a);")
++            lines.append(f"  {self._fmt_write(ops[1], '_xd')};")
++            lines.append(f"  {self._fmt_write(ops[0], '_xd + _xs')}; }}")
++            self._flag_state = ('add', "_flag_a, _flag_b")
++            self._flag_seq += 1
++
++        elif m == 'cmpxchg' and len(ops) == 2:
++            bits = op_bits(ops[0])
++            acc_r = {32: 'eax', 16: 'LO16(eax)', 8: 'LO8(eax)'}[bits]
++            acc_w = {32: 'eax = _xd', 16: 'SET_LO16(eax, _xd)', 8: 'SET_LO8(eax, _xd)'}[bits]
++            a = self._fmt_read(ops[0]); b = self._fmt_read(ops[1])
++            lines.append(f"{{ uint32_t _xd = {a}, _xa = {acc_r}; {comment}")
++            lines.append("  " + self._flag_capture("_xa", "_xd", bits))
++            lines.append("  _cf = (uint32_t)CMP_B(_flag_a, _flag_b);")
++            lines.append(f"  if (_xa == _xd) {{ {self._fmt_write(ops[0], b)}; }} else {{ {acc_w}; }} }}")
++            self._flag_state = ('cmp', "_flag_a, _flag_b")
++            self._flag_seq += 1
++
++        elif m == 'cmpxchg8b' and len(ops) == 1 and ops[0].type == X86_OP_MEM:
++            addr = self._fmt_mem_addr(ops[0].mem)
++            lines.append(f"{{ uint32_t _xa = {addr}; uint64_t _xm = MEM64(_xa), _xe = ((uint64_t)edx << 32) | eax; {comment}")
++            lines.append("  if (_xm == _xe) { MEM64(_xa) = ((uint64_t)ecx << 32) | ebx; _flag_a = 0x40u; }")
++            lines.append("  else { eax = (uint32_t)_xm; edx = (uint32_t)(_xm >> 32); _flag_a = 0; }")
++            lines.append("  _flag_b = 0; _flag_k = FK_EFLAGS; _cf = 0; }")
++            self._flag_state = ('eflags', "_flag_a, _flag_b")
++            self._flag_seq += 1
++
++        elif m in ('bsf', 'bsr') and len(ops) == 2:
++            src = self._fmt_read(ops[1])
++            idx = '(uint32_t)__builtin_ctz(_xs)' if m == 'bsf' else '(uint32_t)(31 - __builtin_clz(_xs))'
++            lines.append(f"{{ uint32_t _xs = {src}; {comment}")
++            lines.append(f"  _flag_a = _xs ? 0u : 0x40u; _flag_b = 0; _flag_k = FK_EFLAGS; _cf = 0;")
++            lines.append(f"  if (_xs) {{ {self._fmt_write(ops[0], idx)}; }} }}")
++            self._flag_state = ('eflags', "_flag_a, _flag_b")
++            self._flag_seq += 1
++
++        elif m == 'pause':
++            lines.append(f"RECOMP_REGS_OUT(); if (recomp_yield_hook) recomp_yield_hook(); RECOMP_REGS_IN(); {comment}")
++
++        elif m in ('fcomi', 'fcompi', 'fucomi', 'fucompi'):
++            # compare ST(0) with ST(i) straight into ZF/PF/CF
++            mm_ = re.search(r'st\((\d)\)\s*$', insn.op_str)
++            i = int(mm_.group(1)) if mm_ else 1
++            lines.append(f"_flag_a = simd_comi_eflags(_st[0], _st[{i}]); _flag_b = 0; _flag_k = FK_EFLAGS; _cf = _flag_a & 1u; {comment}")
++            if m.endswith('pi'):
++                lines.append("(void)fp_pop();")
++            self._flag_state = ('eflags', "_flag_a, _flag_b")
++            self._flag_seq += 1
++
+         elif m == 'xchg':
+             if len(ops) == 2:
+                 a = self._fmt_read(ops[0])
+diff --git a/tools/lift/simd32.py b/tools/lift/simd32.py
+index 6dbbe2f..36db075 100644
+--- a/tools/lift/simd32.py
++++ b/tools/lift/simd32.py
+@@ -73,7 +73,7 @@ OTHER = {"movss", "movsd", "movq", "movd", "movlps", "movlpd", "movhps", "movhpd
+          "movhlps", "movlhps", "movq2dq", "movdq2q", "movntq", "movmskps",
+          "movmskpd", "pmovmskb", "pextrw", "pinsrw", "shufps", "shufpd", "pshufd",
+          "pshuflw", "pshufhw", "pshufw", "unpcklps", "unpckhps", "unpcklpd",
+-         "unpckhpd", "pslldq", "psrldq", "pmaddwd", "psadbw",
++         "unpckhpd", "pslldq", "psrldq", "pmaddwd", "psadbw", "pmuludq",
+          "sqrtps", "sqrtpd", "sqrtss", "sqrtsd", "rcpps", "rcpss", "rsqrtps",
+          "rsqrtss", "minps", "maxps", "minpd", "maxpd", "minss", "maxss", "minsd",
+          "maxsd", "ucomiss", "comiss", "ucomisd", "comisd",
+@@ -318,6 +318,12 @@ class SimdEmitter:
+             parts = " ".join(f"_r.i32[{i}] = (int32_t)((int32_t)_d.i16[{2*i}] * _s.i16[{2*i}] + (int32_t)_d.i16[{2*i+1}] * _s.i16[{2*i+1}]);"
+                              for i in range(n))
+             return [f"{{ V128 _s = {self.vread(s, w)}; V128 _d = {self.vread(d)}; V128 _r = _d; {parts} {self.vwrite(d, '_r')} }}"]
++        if m == "pmuludq":
++            # unsigned 32x32->64 of the even dword lanes (MMX: lane 0 only)
++            w = self.width(d)
++            n = w // 64
++            parts = " ".join(f"_r.u64[{i}] = (uint64_t)_d.u32[{2*i}] * (uint64_t)_s.u32[{2*i}];" for i in range(n))
++            return [f"{{ V128 _s = {self.vread(s, w)}; V128 _d = {self.vread(d)}; V128 _r = _d; {parts} {self.vwrite(d, '_r')} }}"]
+         if m == "psadbw":
+             w = self.width(d)
+             groups = w // 64
+-- 
+2.54.0
+

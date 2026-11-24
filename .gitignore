@@ -1,0 +1,25 @@
+# Proprietary inputs and everything derived from them stay local.
+ref/
+work/
+gen/
+*.exe
+*.dll
+android/app/src/main/jniLibs/
+android/app/build/
+android/build/
+android/.gradle/
+android/local.properties
+.venv/
+third_party/
+__pycache__/
+
+# Test/run artifacts (DXVK pipeline caches, bridge logs) and local session files
+*.dxvk-cache
+*_d3d11.log
+.claude-webui-attachments/
+.claude/
+.plum-hub-assets/
+AGENTS.md
+CLAUDE.md
+
+out/

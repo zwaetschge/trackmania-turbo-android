@@ -1,0 +1,15 @@
+# Odin3 (Snapdragon 8 Elite, Android 15) — TM Turbo Recomp 0.1.0
+# APK with offline Uplay + D3DReflect + DirectInput8. Observed 2026-11-09.
+# Game data imported earlier to Android/data/ch.plum.tmturbo.recomp/files/TrackmaniaTurbo/.
+I TMRecomp: [0] image .../TrackmaniaTurbo.exe base 00400000 size 019BA000 entry 00EEE7D0
+I TMRecomp: [0] bound 475 imports (117 without implementation; they stop when called)
+I TMRecomp: [4100] STATUS Image mapped, 193792 lifted functions available
+I TMRecomp: [4100] STATUS Running original entry point 00EEE7D0
+I TMRecomp: [4100] D3D11CreateDevice probe (type 0, 0 levels) -> feature level B000
+I TMRecomp: [4100] UPLAY_Start(gameId 2070): offline mode, owned copy      <-- offline, no account
+I TMRecomp: [4104] guest thread 4104 starts at 004117D0   (SystemPlatform)
+I TMRecomp: [4108] guest thread 4108 starts at 004117D0   (WebmDecoder)
+# ~126k indirect calls of real engine code run past the licensing gate, then:
+E TMRecomp: [4100] CRASH: signal 11 at guest address 00000100 in guest function 0055E660
+E TMRecomp: [4100] eax=0228A7E0 ecx=00000000 ...  (thiscall with this==0: mov eax,[ecx+0x100])
+# -> -O1/arm64 codegen divergence vs the -O0/x86-64 host, which runs to D3D11CreateDevice.

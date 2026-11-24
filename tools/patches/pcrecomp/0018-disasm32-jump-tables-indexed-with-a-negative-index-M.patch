@@ -1,0 +1,64 @@
+From c02916f27ad1a065bc407c5be96dc68df6820e48 Mon Sep 17 00:00:00 2001
+From: trackmania-port <noreply@localhost>
+Date: Tue, 10 Nov 2026 02:41:01 +0100
+Subject: [PATCH 18/21] disasm32: jump tables indexed with a negative index
+ (MSVC memmove UnwindDownVec) (trackmania-port)
+
+---
+ tools/disasm/disasm32.py | 26 ++++++++++++++++++++++----
+ 1 file changed, 22 insertions(+), 4 deletions(-)
+
+diff --git a/tools/disasm/disasm32.py b/tools/disasm/disasm32.py
+index 2026e51..8557d4b 100644
+--- a/tools/disasm/disasm32.py
++++ b/tools/disasm/disasm32.py
+@@ -438,7 +438,7 @@ class Disassembler:
+                 operands=list(insn.operands) if insn.operands else [],
+             )
+ 
+-    def jump_table_targets(self, insn, limit: int = 256) -> list:
++    def jump_table_targets(self, insn, limit: int = 256, func_start: int = None) -> list:
+         """Entries of the jump table an indirect `jmp` dispatches through.
+ 
+         MSVC puts the table in .text beside the function. Nothing names the arms
+@@ -451,8 +451,26 @@ class Disassembler:
+         op = insn.operands[0]
+         if op.type != X86_OP_MEM or op.mem.scale != 4 or not op.mem.index:
+             return []
+-        return table_entries(self.read_bytes, op.mem.disp & 0xFFFFFFFF,
+-                             self.is_code_address, limit)
++        table = op.mem.disp & 0xFFFFFFFF
++        out = table_entries(self.read_bytes, table, self.is_code_address, limit)
++        # A table can also be indexed with a NEGATIVE index: MSVC's memmove does
++        # `neg ecx / jmp [ecx*4 + UnwindDownVec+28]`, so the displacement names
++        # the LAST slot and the other arms sit in front of it. Walk backwards
++        # too, but only over entries that point into this function (between its
++        # start and a little past the dispatching jump or the table): the slots
++        # in front of an ordinary table are code bytes or the previous
++        # function's table, and neither points here.
++        if func_start is not None:
++            hi = max(insn.address, table) + 0x400
++            for k in range(1, 65):
++                raw = self.read_bytes(table - k * 4, 4)
++                if not raw or len(raw) < 4:
++                    break
++                tgt = int.from_bytes(raw, 'little')
++                if not (func_start <= tgt < hi) or not self.is_code_address(tgt):
++                    break
++                out.append(tgt)
++        return out
+ 
+     def disassemble_function(self, start_va: int, iat_map: dict = None) -> Optional[Function]:
+         """
+@@ -509,7 +527,7 @@ class Disassembler:
+                             if target not in visited:
+                                 work.append(target)
+                     elif target is None:
+-                        func.jump_targets.update(self.jump_table_targets(insn))
++                        func.jump_targets.update(self.jump_table_targets(insn, func_start=start_va))
+                         # `jmp dword ptr [table + idx*4]` -- a switch. The arms
+                         # belong to THIS function: they are its loop body, not
+                         # tail calls, so they have to become blocks here. Lift
+-- 
+2.54.0
+

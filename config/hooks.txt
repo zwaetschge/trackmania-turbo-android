@@ -1,0 +1,46 @@
+# Instruction hook sites: RECOMP_HOOK(va) is emitted before these instructions
+# (handlers: tm_hook_register in the runtime; with none registered they cost a call).
+# LAN join (runtime/src/lan.c): the join needs a master server user, made right here
+0x009C0BE8  9C0AE0 just before it fetches the current master server user
+# LAN host (runtime/src/lan.c): a joining player's login is signed with Nadeo's master
+# server keys; offline there are none, so the LAN host accepts it (result of 0x009CBC00)
+0x009CBD45  9CBC00 login check: return value in esi
+# LAN join diagnostics (runtime/src/lan.c, TM_LAN_DEBUG):
+0x00A15A85  A159E0 get-info coroutine: state id in [[esi]+4]
+0x00A15B11  A159E0 after the connection state call (eax)
+0x00A15B43  A159E0 finalize (ping average, close)
+0x00A16700  A159E0 "Could not contact server"
+0x009C196D  9C1820 reply handler: message 0x12010000
+0x009C18F8  9C1820 message dispatcher: class id in eax
+0x009C0B73  9C0AE0 title length compare (eax = client title length)
+0x009C0BD1  9C0AE0 network system check
+0x009C0C07  9C0AE0 after the user lookup (eax = user object)
+0x009C0E78  9C0AE0 sending the join request
+0x009C0E9D  9C0AE0 wrong title
+0x0051E604  51E2F0 message parser: first byte read ([esp+0x23])
+0x0051E641  51E2F0 message type byte (eax)
+0x0051E662  51E2F0 type table entry found (ebp)
+0x0051E6DA  51E2F0 connection id read
+0x0051E4A7  51E2F0 parse failure
+0x0052194D  TcpReceive: parse result (eax)
+0x0051E39B  51E2F0 branch to the parse failure
+0x0051E3BC  51E2F0 branch to the parse failure
+0x0051E3C8  51E2F0 branch to the parse failure
+0x0051E5F0  51E2F0 branch to the parse failure
+0x0051E60E  51E2F0 branch to the parse failure
+0x0051E654  51E2F0 branch to the parse failure
+0x0051E66C  51E2F0 branch to the parse failure
+0x0051E6A7  51E2F0 branch to the parse failure
+0x0051E6C7  51E2F0 branch to the parse failure
+0x0051E727  51E2F0 branch to the parse failure
+0x0051E7BA  51E2F0 branch to the parse failure
+0x0051E7C2  51E2F0 branch to the parse failure
+0x0051E7FF  51E2F0 branch to the parse failure
+0x0051E8E4  51E2F0 branch to the parse failure
+0x0051E959  51E2F0 branch to the parse failure
+0x0051E989  51E2F0 branch to the parse failure
+0x0051E9B8  51E2F0 branch to the parse failure
+0x0051E9D7  51E2F0 branch to the parse failure
+0x0051EA83  51E2F0 branch to the parse failure
+0x0051EA91  51E2F0 branch to the parse failure
+0x0051EB13  51E2F0 branch to the parse failure

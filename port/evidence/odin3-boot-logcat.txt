@@ -1,0 +1,71 @@
+--------- beginning of main
+11-09 20:55:02.619 29813 29857 I TMRecomp: [0] guest space reserved at host 0x7354636000 (host page 4096)
+11-09 20:55:02.628 29813 29857 I TMRecomp: [0] section .text    00401000 vsize 012A1FF7 raw 012A2000
+11-09 20:55:02.628 29813 29857 I TMRecomp: [0] section .rdata   016A3000 vsize 0047DD7E raw 0047DE00
+11-09 20:55:02.628 29813 29857 I TMRecomp: [0] section .data    01B21000 vsize 00132130 raw 000B9E00
+11-09 20:55:02.628 29813 29857 I TMRecomp: [0] section .tls     01C54000 vsize 00001025 raw 00001200
+11-09 20:55:02.628 29813 29857 I TMRecomp: [0] section _RDATA   01C56000 vsize 00001330 raw 00001400
+11-09 20:55:02.628 29813 29857 I TMRecomp: [0] section .rodata  01C58000 vsize 00000DB0 raw 00000E00
+11-09 20:55:02.628 29813 29857 I TMRecomp: [0] section .rsrc    01C59000 vsize 0000D80C raw 0000DA00
+11-09 20:55:02.634 29813 29857 I TMRecomp: [0] section .reloc   01C67000 vsize 00152D0C raw 00152E00
+11-09 20:55:02.634 29813 29857 I TMRecomp: [0] static TLS template 01C54000-01C55024 zero 0 callbacks 016A8864
+11-09 20:55:02.634 29813 29857 I TMRecomp: [0] image /storage/emulated/0/Android/data/ch.plum.tmturbo.recomp/files/TrackmaniaTurbo/TrackmaniaTurbo.exe base 00400000 size 019BA000 entry 00EEE7D0
+11-09 20:55:02.634 29813 29857 I TMRecomp: [0] bound 475 imports (117 without implementation; they stop when called)
+11-09 20:55:02.634 29813 29857 I TMRecomp: [4100] STATUS Image mapped, 193792 lifted functions available
+11-09 20:55:02.634 29813 29857 I TMRecomp: [4100] STATUS Running original entry point 00EEE7D0
+11-09 20:55:02.634 29813 29857 I TMRecomp: [4100] GetProcAddress(kernel32.dll, FlsAlloc) -> FFE00420
+11-09 20:55:02.634 29813 29857 I TMRecomp: [4100] GetProcAddress(kernel32.dll, FlsFree) -> FFE00430
+11-09 20:55:02.634 29813 29857 I TMRecomp: [4100] GetProcAddress(kernel32.dll, FlsGetValue) -> FFE00440
+11-09 20:55:02.634 29813 29857 I TMRecomp: [4100] GetProcAddress(kernel32.dll, FlsSetValue) -> FFE00450
+11-09 20:55:02.634 29813 29857 I TMRecomp: [4100] GetProcAddress(kernel32.dll, InitializeCriticalSectionEx) -> FFE00730
+11-09 20:55:02.634 29813 29857 I TMRecomp: [4100] GetProcAddress(kernel32.dll, CreateSemaphoreExW) -> FFE00670
+11-09 20:55:02.634 29813 29857 I TMRecomp: [4100] GetProcAddress(kernel32.dll, SetThreadStackGuarantee) -> 00000000
+11-09 20:55:02.634 29813 29857 I TMRecomp: [4100] GetProcAddress(kernel32.dll, CreateThreadpoolTimer) -> 00000000
+11-09 20:55:02.634 29813 29857 I TMRecomp: [4100] GetProcAddress(kernel32.dll, SetThreadpoolTimer) -> 00000000
+11-09 20:55:02.634 29813 29857 I TMRecomp: [4100] GetProcAddress(kernel32.dll, WaitForThreadpoolTimerCallbacks) -> 00000000
+11-09 20:55:02.634 29813 29857 I TMRecomp: [4100] GetProcAddress(kernel32.dll, CloseThreadpoolTimer) -> 00000000
+11-09 20:55:02.634 29813 29857 I TMRecomp: [4100] GetProcAddress(kernel32.dll, CreateThreadpoolWait) -> 00000000
+11-09 20:55:02.634 29813 29857 I TMRecomp: [4100] GetProcAddress(kernel32.dll, SetThreadpoolWait) -> 00000000
+11-09 20:55:02.634 29813 29857 I TMRecomp: [4100] GetProcAddress(kernel32.dll, CloseThreadpoolWait) -> 00000000
+11-09 20:55:02.634 29813 29857 I TMRecomp: [4100] GetProcAddress(kernel32.dll, FlushProcessWriteBuffers) -> 00000000
+11-09 20:55:02.634 29813 29857 I TMRecomp: [4100] GetProcAddress(kernel32.dll, FreeLibraryWhenCallbackReturns) -> 00000000
+11-09 20:55:02.634 29813 29857 I TMRecomp: [4100] GetProcAddress(kernel32.dll, GetCurrentProcessorNumber) -> 00000000
+11-09 20:55:02.634 29813 29857 I TMRecomp: [4100] GetProcAddress(kernel32.dll, GetLogicalProcessorInformation) -> 00000000
+11-09 20:55:02.634 29813 29857 I TMRecomp: [4100] GetProcAddress(kernel32.dll, CreateSymbolicLinkW) -> 00000000
+11-09 20:55:02.634 29813 29857 I TMRecomp: [4100] GetProcAddress(kernel32.dll, SetDefaultDllDirectories) -> 00000000
+11-09 20:55:02.634 29813 29857 I TMRecomp: [4100] GetProcAddress(kernel32.dll, EnumSystemLocalesEx) -> 00000000
+11-09 20:55:02.634 29813 29857 I TMRecomp: [4100] GetProcAddress(kernel32.dll, CompareStringEx) -> 00000000
+11-09 20:55:02.634 29813 29857 I TMRecomp: [4100] GetProcAddress(kernel32.dll, GetDateFormatEx) -> 00000000
+11-09 20:55:02.634 29813 29857 I TMRecomp: [4100] GetProcAddress(kernel32.dll, GetLocaleInfoEx) -> 00000000
+11-09 20:55:02.634 29813 29857 I TMRecomp: [4100] GetProcAddress(kernel32.dll, GetTimeFormatEx) -> 00000000
+11-09 20:55:02.634 29813 29857 I TMRecomp: [4100] GetProcAddress(kernel32.dll, GetUserDefaultLocaleName) -> FFE00B10
+11-09 20:55:02.634 29813 29857 I TMRecomp: [4100] GetProcAddress(kernel32.dll, IsValidLocaleName) -> 00000000
+11-09 20:55:02.634 29813 29857 I TMRecomp: [4100] GetProcAddress(kernel32.dll, LCMapStringEx) -> 00000000
+11-09 20:55:02.634 29813 29857 I TMRecomp: [4100] GetProcAddress(kernel32.dll, GetCurrentPackageId) -> 00000000
+11-09 20:55:02.652 29813 29857 I TMRecomp: [4100] VerQueryValueW(\StringFileInfo\000004b0\BuildInfo) -> found
+11-09 20:55:02.653 29813 29857 I TMRecomp: [4100] GetPrivateProfileString([TrackmaniaTurbo] UserDir, C:\TrackmaniaTurbo\Nadeo.ini) = '{userdocs}\TrackmaniaTurbo'
+11-09 20:55:02.653 29813 29857 I TMRecomp: [4100] GetPrivateProfileString([TrackmaniaTurbo] CommonDir, C:\TrackmaniaTurbo\Nadeo.ini) = '{commondata}\TrackmaniaTurbo'
+11-09 20:55:02.653 29813 29857 I TMRecomp: [4100] SHGetFolderPathW(5) = C:\Users\Player\Documents
+11-09 20:55:02.653 29813 29857 I TMRecomp: [4100] SHGetFolderPathW(23) = C:\ProgramData
+11-09 20:55:02.654 29813 29857 I TMRecomp: [4100] CreateFile(C:\TrackmaniaTurbo\TrackmaniaTurbo.exe, acc 80, disp 3) -> 00000114
+11-09 20:55:02.654 29813 29857 I TMRecomp: [4100] CreateFile(C:\TrackmaniaTurbo\TrackmaniaTurbo.exe, acc 80000000, disp 3) -> 00000118
+11-09 20:55:02.682 29813 29857 I TMRecomp: [4100] RegOpenKeyExA(80000002, SOFTWARE\Microsoft\Windows NT\CurrentVersion) -> not found
+11-09 20:55:02.682 29813 29857 I TMRecomp: [4100] GetProcAddress(kernel32.dll, IsWow64Process) -> 00000000
+11-09 20:55:02.732 29813 29857 I TMRecomp: [4100] RegOpenKeyExA(80000002, HARDWARE\DESCRIPTION\System\CentralProcessor\0) -> not found
+11-09 20:55:02.732 29813 29857 I TMRecomp: [4100] LoadLibrary(Kernel32.dll) -> 7F000000
+11-09 20:55:02.732 29813 29857 I TMRecomp: [4100] GetProcAddress(kernel32.dll, GetVolumePathNamesForVolumeNameW) -> 00000000
+11-09 20:55:02.732 29813 29857 I TMRecomp: [4100] CreateThread(start 004117D0, param 02274E90, flags 0) -> handle 0000011C tid 4104
+11-09 20:55:02.732 29813 29857 I TMRecomp: [4100] thread 4104 named 'SystemPlatform'
+11-09 20:55:02.732 29813 29857 I TMRecomp: [4100] LoadLibrary(dxgi.dll) -> 7F110000
+11-09 20:55:02.732 29813 29857 I TMRecomp: [4100] GetProcAddress(dxgi.dll, CreateDXGIFactory1) -> FFE01740
+11-09 20:55:02.732 29813 29857 I TMRecomp: [4100] CreateDXGIFactory({7B7166EC-21C7-44AE-B21A-C9AE321AE369}) -> 02281920
+11-09 20:55:02.732 29813 29857 I TMRecomp: [4100] LoadLibrary(d3d11.dll) -> 7F120000
+11-09 20:55:02.732 29813 29857 I TMRecomp: [4100] GetProcAddress(d3d11.dll, D3D11CreateDevice) -> FFE01760
+11-09 20:55:02.732 29813 29857 I TMRecomp: [4100] D3D11CreateDevice probe (type 0, 0 levels) -> feature level B000
+11-09 20:55:02.732 29813 29857 I TMRecomp: [4100] LoadLibrary(d3d9.dll) -> 00000000
+11-09 20:55:02.732 29813 29857 I TMRecomp: [4100] GetPrivateProfileString([TrackmaniaTurbo] UPlayAppId, C:\TrackmaniaTurbo\Nadeo.ini) = '2070'
+11-09 20:55:02.732 29813 29857 W TMRecomp: [4100] UPLAY_Start(2070, 0): Uplay not available on this platform
+11-09 20:55:02.733 29813 29857 I TMRecomp: [4100] CreateThread(start 004117D0, param 0228A8E0, flags 0) -> handle 00000120 tid 4108
+11-09 20:55:02.733 29813 29857 I TMRecomp: [4100] thread 4108 named 'WebmDecoder'
+11-09 20:55:02.736 29813 29857 I TMRecomp: [4100] ExitProcess(0) from 00EF1FC0
+11-09 20:55:02.736 29813 29857 I TMRecomp: [4100] STATUS Game called ExitProcess(0)

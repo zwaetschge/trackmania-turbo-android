@@ -1,0 +1,52 @@
+From a247b1335f3705204544f934dd4b83df14e267ac Mon Sep 17 00:00:00 2001
+From: tm-port <tm-port@localhost>
+Date: Tue, 10 Nov 2026 14:33:40 +0100
+Subject: [PATCH 20/21] recomp32: RECOMP_FIST_HOOK, host callback for
+ out-of-range x87 integer stores (trackmania-port)
+
+fist/fistp of a value that does not fit (or NaN) calls recomp_fist_oor(value, bits) when
+RECOMP_FIST_HOOK is defined; the host returns what to store. Lets a port name the guest
+code that converts such values and compare conventions (x86 integer indefinite versus a
+saturating host cast) without rebuilding the lifted code.
+---
+ runtime/recomp32/recomp_types.h | 15 +++++++++++++--
+ 1 file changed, 13 insertions(+), 2 deletions(-)
+
+diff --git a/runtime/recomp32/recomp_types.h b/runtime/recomp32/recomp_types.h
+index 74a7d31..886a9d0 100644
+--- a/runtime/recomp32/recomp_types.h
++++ b/runtime/recomp32/recomp_types.h
+@@ -1059,9 +1059,19 @@ static inline double fp_round_cw(double v, uint16_t cw) {
+  * indefinite" 0x80000000 on x86; the C cast of such a double is undefined and
+  * differs by host (x86-64 happens to give 0x80000000, arm64 saturates and
+  * turns NaN into 0), so the recompiled program would depend on the CPU. */
++/* RECOMP_FIST_HOOK: the host is told about every out-of-range store
++ * (recomp_fist_oor returns the value to store), so it can name the guest code
++ * that converts such values and try other conventions. */
++#ifdef RECOMP_FIST_HOOK
++int64_t recomp_fist_oor(double r, int bits);
++#define RECOMP_FIST_OOR(r, bits, dflt) recomp_fist_oor((r), (bits))
++#else
++#define RECOMP_FIST_OOR(r, bits, dflt) (dflt)
++#endif
+ static inline int64_t fp_round_cw_i32(double v, uint16_t cw) {
+     double r = fp_round_cw(v, cw);
+-    return (r >= -2147483648.0 && r < 2147483648.0) ? (int64_t)r : (int64_t)INT32_MIN;
++    if (__builtin_expect(r >= -2147483648.0 && r < 2147483648.0, 1)) return (int64_t)r;
++    return RECOMP_FIST_OOR(r, 32, (int64_t)INT32_MIN);
+ }
+ #define fp_to_int(v) fp_round_cw_i32((v), _fpu_cw)
+ 
+@@ -1069,7 +1079,8 @@ static inline int64_t fp_round_cw_i32(double v, uint16_t cw) {
+ static inline int64_t fp_st0_to_i64(double v0, int64_t shadow, uint16_t cw) {
+     if (v0 == (double)shadow) return shadow;
+     double r = fp_round_cw(v0, cw);            /* out of range / NaN: integer indefinite, as above */
+-    return (r >= -9223372036854775808.0 && r < 9223372036854775808.0) ? (int64_t)r : INT64_MIN;
++    if (__builtin_expect(r >= -9223372036854775808.0 && r < 9223372036854775808.0, 1)) return (int64_t)r;
++    return RECOMP_FIST_OOR(r, 64, INT64_MIN);
+ }
+ 
+ /* The 80-bit extended format, for `fld/fstp xword`. The model's stack is
+-- 
+2.54.0
+

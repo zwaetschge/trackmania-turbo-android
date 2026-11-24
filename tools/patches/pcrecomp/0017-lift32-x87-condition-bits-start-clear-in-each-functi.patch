@@ -1,0 +1,48 @@
+From eeb3212e67595f3a8e424704f9b883bfc3b6a99a Mon Sep 17 00:00:00 2001
+From: port <x@y>
+Date: Mon, 9 Nov 2026 20:34:17 +0100
+Subject: [PATCH 17/21] lift32: x87 condition bits start clear in each function
+ (fnstsw without a compare) (trackmania-port)
+
+---
+ tools/lift/lift32.py | 10 ++++++++--
+ 1 file changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/tools/lift/lift32.py b/tools/lift/lift32.py
+index 3366124..8a20ab3 100644
+--- a/tools/lift/lift32.py
++++ b/tools/lift/lift32.py
+@@ -220,7 +220,7 @@ def op_bits(op) -> int:
+ # first `[ebp-0x20]` reads 0xFFFFFFE0. ebp is a register like any other; it lives
+ # in recomp_types.h with the rest of the file.
+ FUNCTION_LOCALS = (
+-    'int _fpu_cmp = 0;',
++    'int _fpu_cmp = 1;',
+     'uint32_t _cf = 0;',
+     'int _df = 1;',
+     'uint32_t _flag_k = FK_NONE;',
+@@ -765,6 +765,12 @@ class Lifter:
+         # under one machine lock.
+         if m.startswith('lock'):
+             m = m[4:].strip() or (insn.op_str.split() or [''])[0]
++        # MPX `bnd` prefix and the AMD branch-predictor idiom `rep(z) ret`
++        # change nothing architecturally (trackmania-port).
++        if m.startswith('bnd '):
++            m = m[4:].strip()
++        if m in ('repz ret', 'rep ret', 'repe ret'):
++            m = 'ret'
+         ops = insn.operands if insn.operands else []
+         lines = []
+ 
+@@ -2209,7 +2215,7 @@ class Lifter:
+         name = func.name
+ 
+         lines.append(f"void {name}(void) {{")
+-        lines.append(f"    int _fpu_cmp = 0;")
++        lines.append(f"    int _fpu_cmp = 1;  /* no compare yet: C3=C2=C0=0 as on a fresh FPU */")
+         lines.append(f"    uint32_t _cf = 0;  /* carry flag */")
+         lines.append(f"    int _df = 1;  /* direction flag (1=forward, -1=backward) */")
+         lines.append(f"    uint32_t _flag_a = 0, _flag_b = 0;  /* flag-operand snapshots */")
+-- 
+2.54.0
+

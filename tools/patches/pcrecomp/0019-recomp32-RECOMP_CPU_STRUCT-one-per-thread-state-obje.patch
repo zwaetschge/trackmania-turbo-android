@@ -1,0 +1,334 @@
+From 272b8c90e7163104e40114fe7d2386a6e637bda0 Mon Sep 17 00:00:00 2001
+From: tm-port <tm-port@localhost>
+Date: Tue, 10 Nov 2026 08:05:03 +0100
+Subject: [PATCH 19/21] recomp32: RECOMP_CPU_STRUCT (one per-thread state
+ object, optional TCB slot), RECOMP_FAST_DISPATCH, exact x87 integer stores
+ (trackmania-port)
+
+RECOMP_CPU_STRUCT gathers the whole per-thread machine state in one recomp_cpu_t
+so a shared library does not pay a TLS-resolver call per register access (30 %
+of Trackmania Turbo's main thread on arm64 Android). RECOMP_CPU_TLS_SLOT reads the
+object's address from a thread-control-block word (bionic TLS_SLOT_APP).
+RECOMP_FAST_DISPATCH resolves an indirect target with one host call.
+fist/fistp store the x86 integer indefinite for out-of-range values and NaN
+instead of the host's undefined double->int cast (differs between x86-64 and arm64).
+---
+ runtime/recomp32/recomp_simd.h  |   4 +
+ runtime/recomp32/recomp_types.h | 149 ++++++++++++++++++++++++++++++--
+ 2 files changed, 145 insertions(+), 8 deletions(-)
+
+diff --git a/runtime/recomp32/recomp_simd.h b/runtime/recomp32/recomp_simd.h
+index 9208803..70a0f0e 100644
+--- a/runtime/recomp32/recomp_simd.h
++++ b/runtime/recomp32/recomp_simd.h
+@@ -15,6 +15,7 @@
+ #include <string.h>
+ #include <math.h>
+ 
++#ifndef RECOMP_V128_DEFINED                  /* RECOMP_CPU_STRUCT defines it for its state object */
+ typedef union {
+     float    f32[4];
+     double   f64[2];
+@@ -27,9 +28,12 @@ typedef union {
+     uint64_t u64[2];
+     int64_t  i64[2];
+ } V128;
++#endif
+ 
++#ifndef RECOMP_CPU_STRUCT
+ extern RECOMP_TLS V128     g_xmm[8];
+ extern RECOMP_TLS uint32_t g_mxcsr;          /* only the rounding field (bits 13-14) is honoured */
++#endif
+ 
+ static inline V128 v128_q(uint64_t q) { V128 v; v.u64[0] = q; v.u64[1] = 0; return v; }
+ static inline V128 v128_d(uint32_t d) { V128 v; memset(&v, 0, sizeof v); v.u32[0] = d; return v; }
+diff --git a/runtime/recomp32/recomp_types.h b/runtime/recomp32/recomp_types.h
+index a486f9b..74a7d31 100644
+--- a/runtime/recomp32/recomp_types.h
++++ b/runtime/recomp32/recomp_types.h
+@@ -28,6 +28,98 @@
+ #define RECOMP_TLS
+ #endif
+ 
++/* RECOMP_CPU_STRUCT (trackmania-port): the whole per-thread machine state as
++ * ONE object instead of ~25 separate thread-local variables.
++ *
++ * In a shared library every access to a `__thread` variable is a call into the
++ * dynamic linker's TLS resolver (arm64 Android: tlsdesc_resolver_dynamic), and
++ * a lifted call touches about forty of them (registers out and in, flags,
++ * g_cur_func). Trackmania's main thread spent 30 % of its time in that
++ * resolver. With one object the compiler needs one base pointer per function,
++ * and RECOMP_CPU_TLS_SLOT makes even that a plain load: the pointer lives in a
++ * word of the thread control block the platform reserves for applications
++ * (bionic: TLS_SLOT_APP = 2, free for app use since Android 10), which the host
++ * sets once per thread. The g_* names stay usable everywhere as lvalues.
++ * Requires RECOMP_X87_WINDOW; every translation unit must agree on the macro. */
++#ifdef RECOMP_CPU_STRUCT
++#ifndef RECOMP_X87_WINDOW
++#error "RECOMP_CPU_STRUCT requires RECOMP_X87_WINDOW"
++#endif
++#define RECOMP_X87_SLOTS 256
++#define ICALL_TRACE_SIZE 128
++#define RECOMP_V128_DEFINED
++typedef union {
++    float    f32[4];
++    double   f64[2];
++    uint8_t  u8[16];
++    int8_t   i8[16];
++    uint16_t u16[8];
++    int16_t  i16[8];
++    uint32_t u32[4];
++    int32_t  i32[4];
++    uint64_t u64[2];
++    int64_t  i64[2];
++} V128;
++/* Members carry a c_ prefix: generated code defines eax, esp, ... as macros. */
++typedef struct recomp_cpu {
++    uint32_t c_eax, c_ecx, c_edx, c_esp, c_ebx, c_esi, c_edi, c_ebp;
++    uint32_t c_flag_k, c_flag_a, c_flag_b, c_flag_cf;
++    uint32_t c_cur_func, c_fs_base, c_gs_base, c_mxcsr;
++    uint32_t c_icall_trace_idx, c_icall_count, c_backedges;
++    int      c_fp_sp, c_fp_top;
++    uint16_t c_fpu_cw;
++    uint64_t c_mm[8];
++    V128     c_xmm[8];
++    uint32_t c_icall_trace[ICALL_TRACE_SIZE];
++    uint32_t c_icall_from[ICALL_TRACE_SIZE];
++    void    *c_host[4];                     /* the host runtime's own per-thread pointers */
++    double   c_st_win[RECOMP_X87_SLOTS];
++    int64_t  c_st_i64_win[RECOMP_X87_SLOTS];
++} recomp_cpu_t;
++/* Reset values of a fresh thread's state (designated initialiser body). */
++#define RECOMP_CPU_INIT { .c_fp_sp = RECOMP_X87_SLOTS / 2, .c_fpu_cw = 0x027F, .c_mxcsr = 0x1F80 }
++#if defined(RECOMP_CPU_TLS_SLOT)
++static inline __attribute__((always_inline)) recomp_cpu_t *recomp_cpu_get(void) {
++    return (recomp_cpu_t *)((void **)__builtin_thread_pointer())[RECOMP_CPU_TLS_SLOT];
++}
++static inline void recomp_cpu_set(recomp_cpu_t *c) {
++    ((void **)__builtin_thread_pointer())[RECOMP_CPU_TLS_SLOT] = c;
++}
++#define RECOMP_CPU recomp_cpu_get()
++#else
++extern RECOMP_TLS recomp_cpu_t g_cpu;
++#define RECOMP_CPU (&g_cpu)
++#endif
++#define g_eax (RECOMP_CPU->c_eax)
++#define g_ecx (RECOMP_CPU->c_ecx)
++#define g_edx (RECOMP_CPU->c_edx)
++#define g_esp (RECOMP_CPU->c_esp)
++#define g_ebx (RECOMP_CPU->c_ebx)
++#define g_esi (RECOMP_CPU->c_esi)
++#define g_edi (RECOMP_CPU->c_edi)
++#define g_ebp (RECOMP_CPU->c_ebp)
++#define g_flag_k (RECOMP_CPU->c_flag_k)
++#define g_flag_a (RECOMP_CPU->c_flag_a)
++#define g_flag_b (RECOMP_CPU->c_flag_b)
++#define g_flag_cf (RECOMP_CPU->c_flag_cf)
++#define g_cur_func (RECOMP_CPU->c_cur_func)
++#define g_fs_base (RECOMP_CPU->c_fs_base)
++#define g_gs_base (RECOMP_CPU->c_gs_base)
++#define g_mxcsr (RECOMP_CPU->c_mxcsr)
++#define g_icall_trace_idx (RECOMP_CPU->c_icall_trace_idx)
++#define g_icall_count (RECOMP_CPU->c_icall_count)
++#define g_backedges (RECOMP_CPU->c_backedges)
++#define g_fp_sp (RECOMP_CPU->c_fp_sp)
++#define g_fp_top (RECOMP_CPU->c_fp_top)
++#define g_fpu_cw (RECOMP_CPU->c_fpu_cw)
++#define g_mm (RECOMP_CPU->c_mm)
++#define g_xmm (RECOMP_CPU->c_xmm)
++#define g_icall_trace (RECOMP_CPU->c_icall_trace)
++#define g_icall_from (RECOMP_CPU->c_icall_from)
++#define g_st_win (RECOMP_CPU->c_st_win)
++#define g_st_i64_win (RECOMP_CPU->c_st_i64_win)
++#endif
++
+ /* ============================================================
+  * Global Register Model
+  *
+@@ -36,7 +128,9 @@
+  * ============================================================ */
+ 
+ /* Volatile (caller-saved) registers */
++#ifndef RECOMP_CPU_STRUCT
+ extern RECOMP_TLS uint32_t g_eax, g_ecx, g_edx, g_esp;
++#endif
+ 
+ /* Callee-saved registers (also global for implicit parameter passing).
+  * ebp is global too, not a per-function local: MSVC's __EH_prolog sets its
+@@ -44,7 +138,9 @@ extern RECOMP_TLS uint32_t g_eax, g_ecx, g_edx, g_esp;
+  * would discard it and every C++ EH function would then address off zero.
+  * Real x86 has one ebp; FPO functions that never touch it simply pass the
+  * caller's through, which is exactly the behaviour we want. */
++#ifndef RECOMP_CPU_STRUCT
+ extern RECOMP_TLS uint32_t g_ebx, g_esi, g_edi, g_ebp;
++#endif
+ 
+ /* The x87 FPU stack is GLOBAL (8 shared registers), not per-function: helpers
+  * like __ftol receive their argument on the FPU stack from the caller, and the
+@@ -57,6 +153,7 @@ extern RECOMP_TLS uint32_t g_ebx, g_esi, g_edi, g_ebp;
+  * stay usable as arrays: g_st[i] is ST(i). Every translation unit of a program
+  * (lifted code and runtime) must agree on this macro; the header defines the
+  * storage (weak), so a runtime must not define g_st itself. */
++#ifndef RECOMP_CPU_STRUCT
+ #define RECOMP_X87_SLOTS 256
+ #if defined(_MSC_VER)
+ #define RECOMP_X87_DATA __declspec(selectany)
+@@ -66,13 +163,16 @@ extern RECOMP_TLS uint32_t g_ebx, g_esi, g_edi, g_ebp;
+ RECOMP_X87_DATA RECOMP_TLS double  g_st_win[RECOMP_X87_SLOTS];
+ RECOMP_X87_DATA RECOMP_TLS int64_t g_st_i64_win[RECOMP_X87_SLOTS];
+ RECOMP_X87_DATA RECOMP_TLS int     g_fp_sp = RECOMP_X87_SLOTS / 2;
++#endif
+ #define g_st     (g_st_win + g_fp_sp)
+ #define g_st_i64 (g_st_i64_win + g_fp_sp)
+ #else
+ extern RECOMP_TLS double   g_st[8];
+ #endif
++#ifndef RECOMP_CPU_STRUCT
+ extern RECOMP_TLS int      g_fp_top;
+ extern RECOMP_TLS uint16_t g_fpu_cw;
++#endif
+ 
+ /* The arithmetic flags a function RETURNS with. The lazy flag state is local
+  * to each lifted function, but assembly and the CRT return results in flags:
+@@ -87,7 +187,9 @@ extern RECOMP_TLS uint16_t g_fpu_cw;
+ #else
+ #define RECOMP_WEAK __attribute__((weak))
+ #endif
++#ifndef RECOMP_CPU_STRUCT
+ RECOMP_WEAK RECOMP_TLS uint32_t g_flag_k, g_flag_a, g_flag_b, g_flag_cf;
++#endif
+ #define RECOMP_FLAGS_OUT() (g_flag_k = _flag_k, g_flag_a = _flag_a, g_flag_b = _flag_b, g_flag_cf = _cf)
+ #define RECOMP_FLAGS_IN()  (_flag_k = g_flag_k, _flag_a = g_flag_a, _flag_b = g_flag_b, _cf = g_flag_cf)
+ 
+@@ -202,8 +304,10 @@ extern ptrdiff_t g_mem_base;
+ /* Thread-relative segment bases. In Win32, fs: points at the TIB/TEB; gs is
+  * unused on x86. The lifter emits fs:/gs: accesses as FS_BASE/GS_BASE + addr,
+  * so the runtime points g_fs_base at a simulated TIB (VA). cs/ds/es/ss are flat. */
++#ifndef RECOMP_CPU_STRUCT
+ extern RECOMP_TLS uint32_t g_fs_base;
+ extern RECOMP_TLS uint32_t g_gs_base;
++#endif
+ #define FS_BASE  g_fs_base
+ #define GS_BASE  g_gs_base
+ 
+@@ -707,7 +811,9 @@ static inline uint32_t recomp_eflags_setcf(uint32_t kind, uint32_t a, uint32_t b
+  * wants them thread-local instead.
+  * ============================================================ */
+ 
++#ifndef RECOMP_CPU_STRUCT
+ extern RECOMP_TLS uint64_t g_mm[8];
++#endif
+ 
+ #define MM_W(v, i)  ((int16_t)((uint64_t)(v) >> ((i) * 16)))
+ #define MM_D(v, i)  ((int32_t)((uint64_t)(v) >> ((i) * 32)))
+@@ -948,11 +1054,22 @@ static inline double fp_round_cw(double v, uint16_t cw) {
+     default: return trunc(v);
+     }
+ }
+-#define fp_to_int(v) fp_round_cw((v), _fpu_cw)
++/* The result of fist/fistp m32 as an int64 the lifter's (int32_t) cast then
++ * truncates exactly. A value that does not fit (or NaN) stores the "integer
++ * indefinite" 0x80000000 on x86; the C cast of such a double is undefined and
++ * differs by host (x86-64 happens to give 0x80000000, arm64 saturates and
++ * turns NaN into 0), so the recompiled program would depend on the CPU. */
++static inline int64_t fp_round_cw_i32(double v, uint16_t cw) {
++    double r = fp_round_cw(v, cw);
++    return (r >= -2147483648.0 && r < 2147483648.0) ? (int64_t)r : (int64_t)INT32_MIN;
++}
++#define fp_to_int(v) fp_round_cw_i32((v), _fpu_cw)
+ 
+ /* fistp qword: the exact shadow while st0 is still the value fild loaded. */
+ static inline int64_t fp_st0_to_i64(double v0, int64_t shadow, uint16_t cw) {
+-    return (v0 == (double)shadow) ? shadow : (int64_t)fp_round_cw(v0, cw);
++    if (v0 == (double)shadow) return shadow;
++    double r = fp_round_cw(v0, cw);            /* out of range / NaN: integer indefinite, as above */
++    return (r >= -9223372036854775808.0 && r < 9223372036854775808.0) ? (int64_t)r : INT64_MIN;
+ }
+ 
+ /* The 80-bit extended format, for `fld/fstp xword`. The model's stack is
+@@ -1017,7 +1134,9 @@ static inline void CPUID_impl(uint32_t eax_val, uint32_t ebx_val, uint32_t ecx_v
+ 
+ /* The VA of the function currently executing (see RECOMP_ENTER below); an
+  * unresolved dispatch is far more useful with its caller named. */
++#ifndef RECOMP_CPU_STRUCT
+ extern RECOMP_TLS uint32_t g_cur_func;
++#endif
+ 
+ /* ICALL trace ring buffer for crash diagnostics.
+  *
+@@ -1031,16 +1150,30 @@ extern RECOMP_TLS uint32_t g_cur_func;
+  * indirect calls of its own scrolls its own entry out of the ring, so the
+  * report showed it as a caller and never as a target, and the function that
+  * handed it a null argument was already gone. 128 costs a kilobyte. */
++#ifndef RECOMP_CPU_STRUCT
+ #define ICALL_TRACE_SIZE 128
+ extern RECOMP_TLS uint32_t g_icall_trace[ICALL_TRACE_SIZE];
+ extern RECOMP_TLS uint32_t g_icall_from[ICALL_TRACE_SIZE];
+ extern RECOMP_TLS uint32_t g_icall_trace_idx;
+ extern RECOMP_TLS uint32_t g_icall_count;
++#endif
+ 
+ /* Lookup functions */
+ recomp_func_t recomp_lookup(uint32_t va);          /* binary search in dispatch table */
+ recomp_func_t recomp_lookup_manual(uint32_t va);    /* manual overrides */
+ recomp_func_t recomp_lookup_import(uint32_t va);    /* import bridges */
++/* RECOMP_FAST_DISPATCH (trackmania-port): the host resolves an indirect target
++ * with ONE call, recomp_resolve(), in whatever order and data structure suits
++ * it (overrides, lifted functions, imports). The three-step chain below costs
++ * an import call two failed binary searches before it reaches its bridge. */
++#ifdef RECOMP_FAST_DISPATCH
++recomp_func_t recomp_resolve(uint32_t va);
++#define RECOMP_RESOLVE(fn, va) recomp_func_t fn = recomp_resolve(va)
++#else
++#define RECOMP_RESOLVE(fn, va) recomp_func_t fn = recomp_lookup_manual(va); \
++    if (!fn) fn = recomp_lookup(va); \
++    if (!fn) fn = recomp_lookup_import(va)
++#endif
+ 
+ /* The dummy return address pushed before a recompiled call. The callee's lifted
+  * `ret` pops it. 0xDEAD0000 is a recognizable marker, but if a stack imbalance
+@@ -1091,9 +1224,7 @@ void recomp_unresolved(const char *kind, uint32_t va, uint32_t from);
+     g_icall_from[g_icall_trace_idx & (ICALL_TRACE_SIZE-1)] = g_cur_func; \
+     g_icall_trace_idx++; \
+     g_icall_count++; \
+-    recomp_func_t _fn = recomp_lookup_manual(_va); \
+-    if (!_fn) _fn = recomp_lookup(_va); \
+-    if (!_fn) _fn = recomp_lookup_import(_va); \
++    RECOMP_RESOLVE(_fn, _va); \
+     if (_fn) { \
+         uint32_t _caller = g_cur_func; \
+         PUSH32(esp, RECOMP_RETADDR); \
+@@ -1119,9 +1250,7 @@ void recomp_unresolved(const char *kind, uint32_t va, uint32_t from);
+     g_icall_from[g_icall_trace_idx & (ICALL_TRACE_SIZE-1)] = g_cur_func; \
+     g_icall_trace_idx++; \
+     g_icall_count++; \
+-    recomp_func_t _fn = recomp_lookup_manual(_va); \
+-    if (!_fn) _fn = recomp_lookup(_va); \
+-    if (!_fn) _fn = recomp_lookup_import(_va); \
++    RECOMP_RESOLVE(_fn, _va); \
+     if (_fn) { RECOMP_FLAGS_OUT(); RECOMP_REGS_OUT(); _fn(); RECOMP_REGS_IN(); } \
+     else if (_va == RECOMP_RETADDR) { /* setjmp and friends return by jumping \
+         to the saved return address; that is a return, not a missing target. */ } \
+@@ -1138,7 +1267,9 @@ void recomp_unresolved(const char *kind, uint32_t va, uint32_t from);
+ /* Always-on: the VA of the function currently executing. A plain global store
+  * (no call), so unlike the ring tracer below it doesn't force register reloads --
+  * useful for pinning a crash to a function without perturbing codegen. */
++#ifndef RECOMP_CPU_STRUCT
+ extern RECOMP_TLS uint32_t g_cur_func;
++#endif
+ 
+ /* RECOMP_NATIVE_RANGE (bisection aid, see docs/HYBRID.md): a lifted function
+  * whose VA lies in [g_native_lo, g_native_hi) runs the ORIGINAL machine code
+@@ -1174,7 +1305,9 @@ void recomp_trace_enter(uint32_t va);
+  * all a native call does. The counter is global and unsynchronised on purpose:
+  * only the thread holding the machine runs lifted code. */
+ RECOMP_WEAK void (*recomp_yield_hook)(void);
++#ifndef RECOMP_CPU_STRUCT
+ RECOMP_WEAK RECOMP_TLS uint32_t g_backedges;
++#endif
+ #ifndef RECOMP_YIELD_EVERY
+ #define RECOMP_YIELD_EVERY 0x10000u
+ #endif
+-- 
+2.54.0
+
