@@ -23,13 +23,13 @@ public class TouchPad extends View {
 
     /** A round button: centre and radius as fractions of the view height (x from the right edge). */
     static final class Btn {
-        final String label; final int bit; final float fx, fy, fr; float cx, cy, r; int pointer = -1;
+        String label; final int bit; final float fx, fy, fr; float cx, cy, r; int pointer = -1;
         Btn(String label, int bit, float fx, float fy, float fr) { this.label = label; this.bit = bit; this.fx = fx; this.fy = fy; this.fr = fr; }
     }
     private final Btn[] btns = {
             // a column at the right edge (the game's menus sit centre-right) and GAS/BREMSE below
-            new Btn("GAS", GAS, 0.17f, 0.80f, 0.14f),
-            new Btn("BREMSE", BRAKE, 0.44f, 0.87f, 0.09f),
+            new Btn("", GAS, 0.17f, 0.80f, 0.14f),
+            new Btn("", BRAKE, 0.44f, 0.87f, 0.09f),
             new Btn("A", A, 0.09f, 0.53f, 0.068f),
             new Btn("B", B, 0.09f, 0.36f, 0.062f),
             new Btn("Y", Y, 0.09f, 0.20f, 0.055f),
@@ -48,6 +48,16 @@ public class TouchPad extends View {
         text.setTextAlign(Paint.Align.CENTER);
         text.setTypeface(Typeface.create(Typeface.DEFAULT_BOLD, Typeface.BOLD));
         setHapticFeedbackEnabled(true);
+        relabel();
+    }
+
+    /** GAS / BRAKE in the current language. */
+    void relabel() {
+        for (Btn b : btns) {
+            if (b.bit == GAS) b.label = S.t(R.string.touch_gas);
+            else if (b.bit == BRAKE) b.label = S.t(R.string.touch_brake);
+        }
+        invalidate();
     }
 
     private float stickRadius() { return getHeight() * 0.14f; }

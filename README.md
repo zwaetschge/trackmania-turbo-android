@@ -1,7 +1,5 @@
 # Trackmania Turbo – Android port (build it yourself)
 
-<p align="center"><img src="docs/images/banner.jpg" alt="Trackmania Turbo Android port" width="100%"></p>
-
 The PC version of **Trackmania Turbo** as a native Android app (arm64), playable offline.
 The port is a **static recompilation**: the x86 code of `TrackmaniaTurbo.exe` is translated to
 C and compiled for ARM64. A Windows runtime written for this project replaces
@@ -28,8 +26,8 @@ APK you build contains code recompiled from your EXE, so it is for you, not for 
     <td width="50%"><img src="docs/images/menu-touch.jpg" alt="Main menu with the touch gamepad (iPlay60 mini Turbo)"><br><sub>Main menu with the touch gamepad (iPlay60 mini Turbo)</sub></td>
   </tr>
   <tr>
-    <td width="50%"><img src="docs/images/launcher.jpg" alt="Start screen of the app"><br><sub>Start screen of the app</sub></td>
-    <td width="50%"><img src="docs/images/lan-host.jpg" alt="Hosting a LAN game"><br><sub>Hosting a LAN game</sub></td>
+    <td width="50%"><img src="docs/images/launcher-en.jpg" alt="Start screen of the app"><br><sub>Start screen of the app (English, German, French, Spanish, Italian)</sub></td>
+    <td width="50%"><img src="docs/images/settings-en.jpg" alt="Settings of the app"><br><sub>Settings: language, frame rate, touch controls …</sub></td>
   </tr>
 </table>
 
@@ -79,14 +77,11 @@ Linux without Docker: install the tools listed in `build/Dockerfile`, then run
 
 ## Install and play
 
-The app's screens are in German for now; the button names below are given as they appear.
-
 1. Copy the APK to the device and install it (allow installs from unknown sources).
-2. Start the app → **Spieldaten importieren** (import game data) → pick the game folder **or**
-   a ZIP of it. The app copies what the game needs (~3.8 GB), checks the EXE and sets
+2. Start the app → **Import game data** → pick the game folder **or** a ZIP of it. The app copies what the game needs (~3.8 GB), checks the EXE and sets
    everything up (ZIP: ~2½ minutes on the iPlay60 mini Turbo).
-3. **Spielen** (play). On the first start the app asks for your **player name** (shown in races
-   and LAN games; change it later under **Einstellungen**, the settings).
+3. **Play**. On the first start the app asks for your **player name** (shown in races and LAN
+   games; change it later under **Settings**).
 
 A new build installs over the old one; game data and profile stay. This works for builds signed
 with the same key (the same `work/` folder). If a differently signed version is installed,
@@ -96,14 +91,16 @@ afterwards.
 ## What works
 
 - Campaign, all menus, music and sound, replays/ghosts; progress is saved.
+- The app's start screen speaks **English, German, French, Spanish and Italian**: it follows the
+  device language, or pick one under Settings → Language. The game itself runs in English.
 - **Controls:** built-in or Bluetooth controller, up to 4 at once, rumble.
   A **touch gamepad** (stick, gas, brake, A/B/Y/☰) appears automatically when no controller is
-  connected; setting "Touch-Steuerung": automatic / always / off.
+  connected; setting "Touch controls": automatic / always / off.
 - **Mouse/touch in the menus:** tap = click; tapping the top edge opens the ManiaPlanet bar with
   the game's graphics, sound and control settings.
-- **LAN play** over Wi-Fi, all from the start screen: one device **LAN-Spiel → Spiel eröffnen**
-  (host: mode, tracks, time per track → start), the others **LAN-Spiel → Spiel beitreten**
-  (join); open games show up there by themselves. Every device needs its own game data.
+- **LAN play** over Wi-Fi, all from the start screen: one device **LAN game → Host game**
+  (mode, tracks, time per track → Start), the others **LAN game → Join game**; open games show
+  up there by themselves. Every device needs its own game data.
   Tested with Odin3 + iPlay60 mini Turbo in the same match across a track change.
 - **Community tracks:** `.Map.Gbx` files in the app's `user/ImportTracks` folder show up under
   "My Tracks".

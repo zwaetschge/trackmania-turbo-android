@@ -6,6 +6,7 @@
 #   TM_SERIAL=<adb serial of the test device>
 #   TM_CAPTURE_URL=http://<this machine>:8766          (tools/lan_recv.py receives device captures)
 #   TM_BUILDER_PROJ=<android-builder project id>  TM_BUILDER_DIR=<that project's workspace>
+#   TM_BUILDER_HOST_DIR=<the same workspace as the docker daemon sees it, if different>
 # tools/device.sh drives the device through the android-builder MCP of the Plum environment
 # (node /app/scripts/mcp-call.mjs); elsewhere replace its mcp()/ash() helpers with adb.
 [ -f work/local.env ] && . ./work/local.env

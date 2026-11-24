@@ -34,27 +34,21 @@ final class Lan {
     static final int GAME_PORT = 2350;         // the engine's server port (NetworkServerPort)
     static final String MAGIC = "TMTURBO-LAN";
 
-    // host settings: key, label, values, labels
-    static final String[][] HOST_SETTINGS = {
-            { "lan_mode", "Modus", "ta|rounds|laps", "Zeitrennen|Runden|Laps" },
-            { "lan_maps", "Strecken", "white|green|blue|red|black|canyon|valley|lagoon|stadium|all",
-                    "Weiss (1–40)|Grün (41–80)|Blau (81–120)|Rot (121–160)|Schwarz (161–200)|Canyon (50)|Valley (50)|Lagoon (50)|Stadium (50)|alle 200" },
-            { "lan_time", "Zeit pro Strecke", "5|3|10|15", "5 Minuten|3 Minuten|10 Minuten|15 Minuten" },
+    // host settings (labels in res/values*/strings.xml)
+    static final Launcher.Setting[] HOST_SETTINGS = {
+            new Launcher.Setting("lan_mode", R.string.lan_mode, "ta|rounds|laps", R.string.lan_mode_vals),
+            new Launcher.Setting("lan_maps", R.string.lan_maps, "white|green|blue|red|black|canyon|valley|lagoon|stadium|all", R.string.lan_maps_vals),
+            new Launcher.Setting("lan_time", R.string.lan_time, "5|3|10|15", R.string.lan_time_vals),
     };
     static final String[] COLORS = { "01_White", "02_Green", "03_Blue", "04_Red", "05_Black" };
     static final String[] ENVS = { "01_Canyon", "02_Valley", "03_Lagoon", "04_Stadium" };
 
     static String get(android.content.SharedPreferences p, String key) {
-        for (String[] s : HOST_SETTINGS) if (s[0].equals(key)) return p.getString(key, s[2].split("\\|")[0]);
+        for (Launcher.Setting s : HOST_SETTINGS) if (s.key.equals(key)) return s.get(p);
         return "";
     }
     static String label(android.content.SharedPreferences p, String key) {
-        for (String[] s : HOST_SETTINGS) {
-            if (!s[0].equals(key)) continue;
-            String[] v = s[2].split("\\|"), l = s[3].split("\\|");
-            String cur = get(p, key);
-            for (int i = 0; i < v.length; i++) if (v[i].equals(cur)) return l[i];
-        }
+        for (Launcher.Setting s : HOST_SETTINGS) if (s.key.equals(key)) return s.label(p);
         return "";
     }
 

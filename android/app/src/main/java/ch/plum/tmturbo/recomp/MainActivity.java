@@ -97,6 +97,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
 
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
+        S.apply(this, getSharedPreferences("launcher", MODE_PRIVATE).getString("lang", "auto"));
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         FrameLayout frame = new FrameLayout(this);
         SurfaceView sv = new SurfaceView(this);
@@ -215,6 +216,7 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
             }
             @Override public void lanEditName() { editPlayerName(() -> { launcher.refreshPage(); refreshLauncher(); }); }
             @Override public String lanAddress() { return Lan.localIp(); }
+            @Override public void languageChanged() { launcher.relabel(); refreshLauncher(); touchPad.relabel(); }
         });
         frame.addView(launcher.root, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
         launcher.root.setVisibility(started ? View.GONE : View.VISIBLE);
@@ -380,23 +382,21 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
     void refreshLauncher() {
         File g = gameDir();
         if (!gameReady()) {
-            launcher.setReady(false, "Für dieses Spiel brauchst du deine eigene PC-Version von Trackmania Turbo. "
-                    + "Die App enthält keine Spieldaten: importiere den Spielordner einmal, danach startet das Spiel direkt von hier.");
+            launcher.setReady(false, S.t(R.string.need_game));
             return;
         }
-        launcher.setReady(true, "Wird geprüft …");
+        launcher.setReady(true, S.t(R.string.checking));
         new Thread(() -> {
             String d;
             try {
                 boolean marker = new File(g, GameImporter.MARKER).isFile();
                 boolean ok = marker || GameImporter.EXE_SHA256.equals(GameImporter.sha256(new File(g, "TrackmaniaTurbo.exe")));
-                d = ok ? "PC-Version 2016-11-07 · " + String.format(java.util.Locale.ROOT, "%.1f GB", dirSize(g) / 1e9)
-                        + "\nSpieler: " + Launcher.playerName(prefs) + " · Community-Strecken: " + communityTracks()
-                       : "TrackmaniaTurbo.exe hat nicht die erwartete Version. Bitte neu importieren.";
+                d = ok ? S.f(R.string.ready_detail, dirSize(g) / 1e9, Launcher.playerName(prefs), communityTracks())
+                       : S.t(R.string.exe_wrong);
                 final boolean fok = ok; final String fd = d;
                 ui.post(() -> launcher.setReady(fok, fd));
             } catch (Exception e) {
-                ui.post(() -> launcher.setReady(true, "Spieldaten vorhanden."));
+                ui.post(() -> launcher.setReady(true, S.t(R.string.data_present)));
             }
         }).start();
     }
@@ -412,23 +412,23 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
         String[] n = new File(userDir(), "ImportTracks").list();
         String v = Launcher.get(prefs, "tracks");
         int have = n == null ? 0 : n.length;
-        if (have == 0) return "keine (Ordner user/ImportTracks)";
-        if (v.equals("0")) return have + " vorhanden, ausgeschaltet";
-        return (v.equals("all") ? have : Math.min(have, Integer.parseInt(v))) + " im Spiel (TRACKBUILDER → MANAGE YOUR TRACKS)";
+        if (have == 0) return S.t(R.string.tracks_none);
+        if (v.equals("0")) return S.f(R.string.tracks_off, have);
+        return S.f(R.string.tracks_on, v.equals("all") ? have : Math.min(have, Integer.parseInt(v)));
     }
 
     // ---- import (Storage Access Framework) ----------------------------------------
     void pickFolder() {
         Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE);
         i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        try { startActivityForResult(i, REQ_TREE); } catch (Exception e) { launcher.importFinished(false, "Kein Dateiauswahl-Dialog verfügbar: " + e.getMessage()); }
+        try { startActivityForResult(i, REQ_TREE); } catch (Exception e) { launcher.importFinished(false, S.f(R.string.no_picker, e.getMessage())); }
     }
     void pickZip() {
         Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         i.addCategory(Intent.CATEGORY_OPENABLE);
         i.setType("*/*");
         i.putExtra(Intent.EXTRA_MIME_TYPES, new String[] { "application/zip", "application/x-zip-compressed", "application/octet-stream" });
-        try { startActivityForResult(i, REQ_ZIP); } catch (Exception e) { launcher.importFinished(false, "Kein Dateiauswahl-Dialog verfügbar: " + e.getMessage()); }
+        try { startActivityForResult(i, REQ_ZIP); } catch (Exception e) { launcher.importFinished(false, S.f(R.string.no_picker, e.getMessage())); }
     }
     @Override protected void onActivityResult(int req, int res, Intent data) {
         super.onActivityResult(req, res, data);
@@ -518,18 +518,18 @@ public class MainActivity extends Activity implements SurfaceHolder.Callback {
             return false;
         });
         dlg[0] = new android.app.AlertDialog.Builder(this)
-                .setTitle("Dein Spielername")
-                .setMessage("Erscheint im Rennen und bei LAN-Spielen den anderen Spielern. Buchstaben, Ziffern, Leerzeichen, _ . - (bis 20 Zeichen).")
+                .setTitle(S.t(R.string.name_title))
+                .setMessage(S.t(R.string.name_msg))
                 .setView(e)
                 .setCancelable(!first)
-                .setPositiveButton("OK", (d, w) -> {
+                .setPositiveButton(S.t(R.string.btn_ok), (d, w) -> {
                     String n = e.getText().toString().replaceAll("[^A-Za-z0-9 _.-]", "").trim();
                     if (n.length() > 20) n = n.substring(0, 20).trim();
                     if (n.isEmpty()) n = Launcher.playerName(prefs);
                     prefs.edit().putString("lan_name", n).apply();
                     if (then != null) then.run();
                 })
-                .setNegativeButton(first ? "SO LASSEN" : "ABBRECHEN", (d, w) -> {
+                .setNegativeButton(S.t(first ? R.string.btn_keep : R.string.btn_cancel), (d, w) -> {
                     if (first) { prefs.edit().putString("lan_name", Launcher.playerName(prefs)).apply(); if (then != null) then.run(); }
                 })
                 .show();

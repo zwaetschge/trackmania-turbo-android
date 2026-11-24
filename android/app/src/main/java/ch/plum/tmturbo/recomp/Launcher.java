@@ -40,6 +40,7 @@ final class Launcher {
         void lanFind(boolean on);            // listen for hosts on the Wi-Fi (results: lanHosts)
         void lanEditName();                  // player name dialog
         String lanAddress();                 // this device's address on the Wi-Fi, or null
+        void languageChanged();              // the "lang" setting changed (S already switched)
     }
 
     static final int ACCENT = Color.rgb(255, 196, 0), ACCENT2 = Color.rgb(0, 200, 255);
@@ -50,10 +51,11 @@ final class Launcher {
     private final Actions act;
     private final SharedPreferences prefs;
     private final LinearLayout panel;
-    private final TextView statusTitle, statusText;
+    private final TextView statusTitle, statusText, subtitle, version;
     private final ProgressBar bar;
     private boolean ready, importing;
     private String page = "main";
+    private String focusKey;              // settings page: the setting that keeps the focus
 
     Launcher(Activity a, SharedPreferences prefs, Actions act) {
         this.a = a; this.prefs = prefs; this.act = act;
@@ -74,13 +76,11 @@ final class Launcher {
         TextView t2 = text("TURBO", 54, ACCENT, true);
         t2.setTypeface(Typeface.create(Typeface.DEFAULT_BOLD, Typeface.BOLD_ITALIC));
         t2.setPadding(0, dp(-14), 0, 0);
-        TextView sub = text("Android · statische Rekompilierung", 16, DIM, false);
-        sub.setPadding(dp(2), dp(10), 0, 0);
-        String ver = "";
-        try { ver = a.getPackageManager().getPackageInfo(a.getPackageName(), 0).versionName; } catch (Exception ignored) { }
-        TextView v = text("Version " + ver, 13, Color.argb(160, 150, 160, 178), false);
-        v.setPadding(dp(2), dp(4), 0, 0);
-        left.addView(t1); left.addView(t2); left.addView(sub); left.addView(v);
+        subtitle = text("", 16, DIM, false);
+        subtitle.setPadding(dp(2), dp(10), 0, 0);
+        version = text("", 13, Color.argb(160, 150, 160, 178), false);
+        version.setPadding(dp(2), dp(4), 0, 0);
+        left.addView(t1); left.addView(t2); left.addView(subtitle); left.addView(version);
         left.setPadding(0, 0, dp(28), 0);
         // the title stays on one line: on narrow screens both words shrink together
         t1.setMaxLines(1); t2.setMaxLines(1);
@@ -128,13 +128,29 @@ final class Launcher {
 
         fl.addView(row, new FrameLayout.LayoutParams(-1, -1));
         root = fl;
+        fixedTexts();
+    }
+
+    private void fixedTexts() {
+        subtitle.setText(S.t(R.string.app_subtitle));
+        String ver = "";
+        try { ver = a.getPackageManager().getPackageInfo(a.getPackageName(), 0).versionName; } catch (Exception ignored) { }
+        version.setText(S.f(R.string.version, ver));
+    }
+
+    /** After a language change: all texts again, the current page rebuilt. */
+    void relabel() {
+        fixedTexts();
+        if (importing) return;
+        statusTitle.setText(S.t(ready ? R.string.status_ready : R.string.status_none));
+        refreshPage();
     }
 
     // ------------------------------------------------------------------ state
     void setReady(boolean ready, String detail) {
         this.ready = ready;
         if (importing) return;
-        statusTitle.setText(ready ? "Spieldaten bereit" : "Keine Spieldaten");
+        statusTitle.setText(S.t(ready ? R.string.status_ready : R.string.status_none));
         statusTitle.setTextColor(ready ? Color.rgb(120, 230, 140) : ACCENT);
         statusText.setText(detail);
         bar.setVisibility(View.GONE);
@@ -143,13 +159,13 @@ final class Launcher {
 
     void importStarted() {
         importing = true;
-        statusTitle.setText("Spieldaten werden importiert …");
+        statusTitle.setText(S.t(R.string.status_importing));
         statusTitle.setTextColor(ACCENT);
-        statusText.setText("Dateien werden gezählt …");
+        statusText.setText(S.t(R.string.status_counting));
         bar.setVisibility(View.VISIBLE); bar.setProgress(0);
         page = "import-run";
         panel.removeAllViews();
-        View c = button("ABBRECHEN", false, x -> act.cancelImport());
+        View c = button(S.t(R.string.btn_cancel), false, x -> act.cancelImport());
         panel.addView(c);
         c.requestFocus();
     }
@@ -159,16 +175,15 @@ final class Launcher {
         String eta = "";
         if (bps > 0 && total > done) {
             long s = (total - done) / bps;
-            eta = String.format(Locale.ROOT, " · noch %d:%02d", s / 60, s % 60);
+            eta = S.f(R.string.import_eta, s / 60, s % 60);
         }
-        statusText.setText(String.format(Locale.ROOT, "%.2f / %.2f GB · %.0f MB/s%s\n%s",
-                done / 1e9, total / 1e9, bps / 1e6, eta, file));
+        statusText.setText(S.f(R.string.import_progress, done / 1e9, total / 1e9, bps / 1e6, eta, file));
     }
 
     void importFinished(boolean ok, String msg) {
         importing = false;
         bar.setVisibility(View.GONE);
-        statusTitle.setText(ok ? "Spieldaten bereit" : "Import nicht abgeschlossen");
+        statusTitle.setText(S.t(ok ? R.string.status_ready : R.string.status_import_failed));
         statusTitle.setTextColor(ok ? Color.rgb(120, 230, 140) : Color.rgb(255, 110, 90));
         statusText.setText(msg);
         ready = ok || ready;
@@ -190,25 +205,26 @@ final class Launcher {
         leave();
         page = "main";
         panel.removeAllViews();
-        View play = button("SPIELEN", true, x -> { if (ready) act.play(); });
+        View play = button(S.t(R.string.btn_play), true, x -> { if (ready) act.play(); });
         play.setEnabled(ready);
         play.setAlpha(ready ? 1f : 0.35f);
         panel.addView(play);
-        View lan = button("LAN-SPIEL", false, x -> { if (ready) showLan(); });
+        View lan = button(S.t(R.string.btn_lan), false, x -> { if (ready) showLan(); });
         lan.setEnabled(ready);
         lan.setAlpha(ready ? 1f : 0.35f);
         panel.addView(lan);
-        panel.addView(button(ready ? "SPIELDATEN NEU IMPORTIEREN" : "SPIELDATEN IMPORTIEREN", !ready, x -> showImport()));
-        panel.addView(button("EINSTELLUNGEN", false, x -> showSettings()));
-        panel.addView(button("BEENDEN", false, x -> act.quit()));
+        panel.addView(button(S.t(ready ? R.string.btn_reimport : R.string.btn_import), !ready, x -> showImport()));
+        panel.addView(button(S.t(R.string.btn_settings), false, x -> { focusKey = null; showSettings(); }));
+        panel.addView(button(S.t(R.string.btn_quit), false, x -> act.quit()));
         panel.getChildAt(ready ? 0 : 2).requestFocus();
     }
 
     // ------------------------------------------------------------------ LAN games
     static String playerName(SharedPreferences p) {
         String n = p.getString("lan_name", "");
-        if (n.isEmpty()) n = android.os.Build.MODEL == null ? "Spieler" : android.os.Build.MODEL;
-        return n.replaceAll("[^A-Za-z0-9 _.-]", "").trim().isEmpty() ? "Spieler" : n.replaceAll("[^A-Za-z0-9 _.-]", "").trim();
+        if (n.isEmpty()) n = android.os.Build.MODEL == null ? "" : android.os.Build.MODEL;
+        n = n.replaceAll("[^A-Za-z0-9 _.-]", "").trim();
+        return n.isEmpty() ? S.t(R.string.default_player) : n;
     }
 
     void showLan() {
@@ -216,16 +232,14 @@ final class Launcher {
         page = "lan";
         panel.removeAllViews();
         String ip = act.lanAddress();
-        TextView info = text((ip == null ? "Kein WLAN gefunden: alle Geräte müssen im selben WLAN sein (oder im Hotspot eines der Geräte)."
-                : "Dieses Gerät: " + ip + " · Name: " + playerName(prefs) + "\nAlle Geräte im selben WLAN, jedes mit eigenen Spieldaten. "
-                + "Eines eröffnet das Spiel, die anderen treten bei.\nOffene Spiele erscheinen unter „Spiel beitreten“ von selbst; sonst die IP-Adresse des Gastgebers eingeben.") , 13, DIM, false);
+        TextView info = text(ip == null ? S.t(R.string.lan_no_wifi) : S.f(R.string.lan_info, ip, playerName(prefs)), 13, DIM, false);
         info.setPadding(dp(4), 0, dp(4), dp(6));
         panel.addView(info);
-        View host = button("SPIEL ERÖFFNEN", true, x -> showLanHost());
+        View host = button(S.t(R.string.btn_lan_host), true, x -> showLanHost());
         panel.addView(host);
-        panel.addView(button("SPIEL BEITRETEN", false, x -> showLanJoin()));
-        panel.addView(button("SPIELERNAME:  " + playerName(prefs), false, x -> act.lanEditName()));
-        panel.addView(button("ZURÜCK", false, x -> showMain()));
+        panel.addView(button(S.t(R.string.btn_lan_join), false, x -> showLanJoin()));
+        panel.addView(button(S.f(R.string.btn_player_name, playerName(prefs)), false, x -> act.lanEditName()));
+        panel.addView(button(S.t(R.string.btn_back), false, x -> showMain()));
         host.requestFocus();
     }
 
@@ -234,22 +248,16 @@ final class Launcher {
         page = "lan-host";
         panel.removeAllViews();
         View first = null;
-        for (String[] s : Lan.HOST_SETTINGS) {
-            String[] vals = s[2].split("\\|");
+        for (Setting s : Lan.HOST_SETTINGS) {
             TextView b = (TextView) button("", false, null);
-            Runnable refresh = () -> b.setText(s[1] + ":  " + Lan.label(prefs, s[0]));
+            Runnable refresh = () -> b.setText(S.f(R.string.setting_line, S.t(s.label), s.label(prefs)));
             refresh.run();
-            b.setOnClickListener(x -> {
-                String cur = Lan.get(prefs, s[0]);
-                int i = 0; for (int k = 0; k < vals.length; k++) if (vals[k].equals(cur)) i = k;
-                prefs.edit().putString(s[0], vals[(i + 1) % vals.length]).apply();
-                refresh.run();
-            });
+            b.setOnClickListener(x -> { s.next(prefs); refresh.run(); });
             panel.addView(b);
             if (first == null) first = b;
         }
-        panel.addView(button("STARTEN", true, x -> act.lanHost()));
-        panel.addView(button("ZURÜCK", false, x -> showLan()));
+        panel.addView(button(S.t(R.string.btn_start), true, x -> act.lanHost()));
+        panel.addView(button(S.t(R.string.btn_back), false, x -> showLan()));
         if (first != null) first.requestFocus();
     }
 
@@ -258,15 +266,15 @@ final class Launcher {
     void showLanJoin() {
         page = "lan-join";
         panel.removeAllViews();
-        TextView info = text("Offene Spiele im WLAN (die Liste aktualisiert sich selbst):", 13, DIM, false);
+        TextView info = text(S.t(R.string.lan_open_games), 13, DIM, false);
         info.setPadding(dp(4), 0, dp(4), dp(2));
         panel.addView(info);
         hostList = new LinearLayout(a);
         hostList.setOrientation(LinearLayout.VERTICAL);
         panel.addView(hostList);
         lanHosts(new java.util.ArrayList<>());
-        panel.addView(button("IP-ADRESSE EINGEBEN", false, x -> askIp()));
-        View back = button("ZURÜCK", false, x -> showLan());
+        panel.addView(button(S.t(R.string.btn_enter_ip), false, x -> askIp()));
+        View back = button(S.t(R.string.btn_back), false, x -> showLan());
         panel.addView(back);
         back.requestFocus();
         act.lanFind(true);
@@ -279,7 +287,7 @@ final class Launcher {
         String keep = focused != null && focused.getTag() instanceof String ? (String) focused.getTag() : null;
         hostList.removeAllViews();
         if (hosts.isEmpty()) {
-            TextView none = text("Noch kein Spiel gefunden … (auf dem anderen Gerät: LAN-SPIEL → SPIEL ERÖFFNEN)", 13, ACCENT2, false);
+            TextView none = text(S.t(R.string.lan_none_found), 13, ACCENT2, false);
             none.setPadding(dp(4), dp(8), dp(4), dp(4));
             hostList.addView(none);
             return;
@@ -294,17 +302,17 @@ final class Launcher {
 
     private void askIp() {
         android.widget.EditText e = new android.widget.EditText(a);
-        e.setHint("z. B. 192.168.1.20");
+        e.setHint(S.t(R.string.ip_hint));
         e.setInputType(android.text.InputType.TYPE_CLASS_TEXT);
         e.setText(prefs.getString("lan_last_ip", ""));
         new android.app.AlertDialog.Builder(a)
-                .setTitle("IP-Adresse des Spiels")
+                .setTitle(S.t(R.string.ip_title))
                 .setView(e)
-                .setPositiveButton("BEITRETEN", (d, w) -> {
+                .setPositiveButton(S.t(R.string.btn_join), (d, w) -> {
                     String ip = e.getText().toString().trim();
                     if (ip.matches("\\d{1,3}(\\.\\d{1,3}){3}")) { prefs.edit().putString("lan_last_ip", ip).apply(); act.lanJoin(ip, Lan.GAME_PORT); }
                 })
-                .setNegativeButton("ABBRECHEN", null)
+                .setNegativeButton(S.t(R.string.btn_cancel), null)
                 .show();
     }
 
@@ -312,29 +320,38 @@ final class Launcher {
         leave();
         page = "import";
         panel.removeAllViews();
-        TextView info = text("Wähle den Ordner deiner Trackmania-Turbo-Installation für den PC (der Ordner mit "
-                + "TrackmaniaTurbo.exe, z. B. auf einer SD-Karte oder unter Downloads) oder eine ZIP-Datei dieses Ordners. "
-                + "Kopiert werden nur die Dateien, die das Spiel braucht (etwa 3,8 GB).", 13, DIM, false);
+        TextView info = text(S.t(R.string.import_info), 13, DIM, false);
         info.setPadding(dp(4), 0, dp(4), dp(10));
         panel.addView(info);
-        View f = button("ORDNER WÄHLEN", true, x -> act.importFolder());
+        View f = button(S.t(R.string.btn_pick_folder), true, x -> act.importFolder());
         panel.addView(f);
-        panel.addView(button("ZIP-DATEI WÄHLEN", false, x -> act.importZip()));
-        panel.addView(button("ZURÜCK", false, x -> showMain()));
+        panel.addView(button(S.t(R.string.btn_pick_zip), false, x -> act.importZip()));
+        panel.addView(button(S.t(R.string.btn_back), false, x -> showMain()));
         f.requestFocus();
     }
 
-    // settings: key, label, values (stored), labels (shown)
-    static final String[][] SETTINGS = {
-            { "fps", "Bildrate", "60|120|30", "60 fps (stabil, empfohlen)|120 fps (120-Hz-Display, Gerät wird warm)|30 fps" },
-            { "touch", "Touch-Steuerung", "auto|on|off", "automatisch (ohne Controller)|immer|aus" },
-            { "hudcalm", "Turbo-Anzeige", "1|0", "ruhig pulsierend|wie im Original (16 Hz)" },
-            { "tracks", "Community-Strecken", "all|800|400|0", "alle|800 beliebteste|400 beliebteste|keine" },
-            { "log", "Protokoll beim Start", "0|1", "aus|anzeigen" },
+    /** A setting: key in the prefs, label, stored values ("|", the first is the default) and the
+     *  string resource with the shown choices in the same order (0 = the language names). */
+    static final class Setting {
+        final String key; final int label; final String[] values; final int labels;
+        Setting(String key, int label, String values, int labels) { this.key = key; this.label = label; this.values = values.split("\\|"); this.labels = labels; }
+        String get(SharedPreferences p) { return p.getString(key, values[0]); }
+        int index(SharedPreferences p) { String cur = get(p); for (int k = 0; k < values.length; k++) if (values[k].equals(cur)) return k; return 0; }
+        String label(SharedPreferences p) { String[] l = labels == 0 ? S.langLabels() : S.list(labels); return l[Math.min(index(p), l.length - 1)]; }
+        void next(SharedPreferences p) { p.edit().putString(key, values[(index(p) + 1) % values.length]).apply(); }
+    }
+
+    static final Setting[] SETTINGS = {
+            new Setting("lang", R.string.set_lang, S.LANGS, 0),
+            new Setting("fps", R.string.set_fps, "60|120|30", R.string.set_fps_vals),
+            new Setting("touch", R.string.set_touch, "auto|on|off", R.string.set_touch_vals),
+            new Setting("hudcalm", R.string.set_hud, "1|0", R.string.set_hud_vals),
+            new Setting("tracks", R.string.set_tracks, "all|800|400|0", R.string.set_tracks_vals),
+            new Setting("log", R.string.set_log, "0|1", R.string.set_log_vals),
     };
 
     static String get(SharedPreferences p, String key) {
-        for (String[] s : SETTINGS) if (s[0].equals(key)) return p.getString(key, s[2].split("\\|")[0]);
+        for (Setting s : SETTINGS) if (s.key.equals(key)) return s.get(p);
         return "";
     }
 
@@ -351,32 +368,28 @@ final class Launcher {
         leave();
         page = "settings";
         panel.removeAllViews();
-        View first = button("SPIELERNAME:  " + playerName(prefs), false, x -> act.lanEditName());
+        View first = button(S.f(R.string.btn_player_name, playerName(prefs)), false, x -> act.lanEditName());
         panel.addView(first);
-        for (String[] s : SETTINGS) {
-            String[] vals = s[2].split("\\|"), labels = s[3].split("\\|");
+        for (Setting s : SETTINGS) {
             TextView b = (TextView) button("", false, null);
-            Runnable refresh = () -> {
-                String cur = get(prefs, s[0]);
-                int i = 0; for (int k = 0; k < vals.length; k++) if (vals[k].equals(cur)) i = k;
-                b.setText(s[1] + ":  " + labels[i]);
-            };
+            Runnable refresh = () -> b.setText(S.f(R.string.setting_line, S.t(s.label), s.label(prefs)));
             refresh.run();
             b.setOnClickListener(x -> {
-                String cur = get(prefs, s[0]);
-                int i = 0; for (int k = 0; k < vals.length; k++) if (vals[k].equals(cur)) i = k;
-                prefs.edit().putString(s[0], vals[(i + 1) % vals.length]).apply();
-                refresh.run();
+                s.next(prefs);
+                if (s.key.equals("lang")) {          // all texts change: rebuild the page, focus stays here
+                    S.apply(a, s.get(prefs));
+                    focusKey = s.key;
+                    act.languageChanged();
+                } else refresh.run();
             });
             panel.addView(b);
-            if (first == null) first = b;
+            if (s.key.equals(focusKey)) first = b;
         }
-        TextView note = text("Grafik, Ton und Steuerung stellst du im Spiel ein: Bildschirm oben antippen (oder die Maus an den "
-                + "oberen Rand) und das Zahnrad wählen.", 12, DIM, false);
+        TextView note = text(S.t(R.string.settings_note), 12, DIM, false);
         note.setPadding(dp(4), dp(6), dp(4), dp(6));
         panel.addView(note);
-        panel.addView(button("ZURÜCK", false, x -> showMain()));
-        if (first != null) first.requestFocus();
+        panel.addView(button(S.t(R.string.btn_back), false, x -> showMain()));
+        first.requestFocus();
     }
 
     // ------------------------------------------------------------------ widgets

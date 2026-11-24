@@ -112,7 +112,7 @@ final class GameImporter {
             List<Doc> all = list(tree, rootId, "", 0, new ArrayList<>());
             String prefix = findPrefix(all);
             if (prefix == null)
-                return new Result(false, "In diesem Ordner ist kein TrackmaniaTurbo.exe. Wähle den Ordner deiner Trackmania-Turbo-Installation.", 0, 0);
+                return new Result(false, S.t(R.string.imp_no_exe_dir), 0, 0);
             List<Doc> files = new ArrayList<>();
             total = 0;
             for (Doc d : all) {
@@ -126,11 +126,11 @@ final class GameImporter {
             long need = 0;
             for (Doc d : files) { File f = new File(dest, d.rel); if (!(f.isFile() && f.length() == d.size)) need += d.size; }
             if (need > freeBytes(dest) - (200L << 20))
-                return new Result(false, String.format(Locale.ROOT, "Zu wenig freier Speicher: %.1f GB nötig, %.1f GB frei.", need / 1e9, freeBytes(dest) / 1e9), 0, 0);
+                return new Result(false, S.f(R.string.imp_no_space, need / 1e9, freeBytes(dest) / 1e9), 0, 0);
             t0 = System.nanoTime(); done = 0;
             int n = 0;
             for (Doc d : files) {
-                if (cancelled) return new Result(false, "Import abgebrochen.", n, done);
+                if (cancelled) return new Result(false, S.t(R.string.imp_cancelled), n, done);
                 File out = new File(dest, d.rel);
                 if (out.isFile() && out.length() == d.size) { done += d.size; tick(d.rel); n++; continue; }
                 try (InputStream in = cr.openInputStream(DocumentsContract.buildDocumentUriUsingTree(tree, d.id))) {
@@ -144,7 +144,7 @@ final class GameImporter {
             }
             return finish(n);
         } catch (Exception e) {
-            return new Result(false, "Import fehlgeschlagen: " + e.getMessage(), 0, done);
+            return new Result(false, cancelled ? S.t(R.string.imp_cancelled) : S.f(R.string.imp_failed, e.getMessage()), 0, done);
         }
     }
 
@@ -166,7 +166,7 @@ final class GameImporter {
         try {
             total = zipSize > 0 ? zipSize : 0;
             if (zipSize > freeBytes(dest) - (200L << 20))
-                return new Result(false, String.format(Locale.ROOT, "Zu wenig freier Speicher: etwa %.1f GB nötig, %.1f GB frei.", zipSize / 1e9, freeBytes(dest) / 1e9), 0, 0);
+                return new Result(false, S.f(R.string.imp_no_space, zipSize / 1e9, freeBytes(dest) / 1e9), 0, 0);
             t0 = System.nanoTime(); done = 0;
             int n = 0; boolean sawExe = false;
             CountingStream counted;
@@ -177,7 +177,7 @@ final class GameImporter {
                 try (ZipInputStream zin = new ZipInputStream(counted)) {
                     ZipEntry e;
                     while ((e = zin.getNextEntry()) != null) {
-                        if (cancelled) return new Result(false, "Import abgebrochen.", n, done);
+                        if (cancelled) return new Result(false, S.t(R.string.imp_cancelled), n, done);
                         if (e.isDirectory()) continue;
                         String rel = strip(e.getName().replace('\\', '/'));
                         if (rel == null || !wanted(rel)) continue;
@@ -194,10 +194,10 @@ final class GameImporter {
                 }
             }
             if (!sawExe && !new File(dest, "TrackmaniaTurbo.exe").isFile())
-                return new Result(false, "In dieser ZIP-Datei ist kein TrackmaniaTurbo.exe.", n, done);
+                return new Result(false, S.t(R.string.imp_no_exe_zip), n, done);
             return finish(n);
         } catch (Exception e) {
-            return new Result(false, "Import fehlgeschlagen: " + e.getMessage(), 0, done);
+            return new Result(false, cancelled ? S.t(R.string.imp_cancelled) : S.f(R.string.imp_failed, e.getMessage()), 0, done);
         }
     }
 
@@ -228,7 +228,7 @@ final class GameImporter {
         try (OutputStream o = new FileOutputStream(part)) {
             int k;
             while ((k = in.read(buf)) > 0) {
-                if (cancelled) throw new IOException("abgebrochen");
+                if (cancelled) throw new IOException("cancelled");
                 o.write(buf, 0, k); done += k; tick(rel);
             }
         }
@@ -241,7 +241,7 @@ final class GameImporter {
         try (OutputStream o = new FileOutputStream(part)) {
             int k;
             while ((k = in.read(buf)) > 0) {
-                if (cancelled) throw new IOException("abgebrochen");
+                if (cancelled) throw new IOException("cancelled");
                 o.write(buf, 0, k); done = counted.count; tick(rel);
             }
         }
@@ -261,19 +261,18 @@ final class GameImporter {
         String h = sha256(exe);
         if (!EXE_SHA256.equals(h)) {
             exe.delete();
-            return new Result(false, "Diese TrackmaniaTurbo.exe passt nicht zu diesem Port (erwartet wird die PC-Version 2016-11-07, SHA-256 "
-                    + EXE_SHA256.substring(0, 12) + "…, gefunden " + h.substring(0, 12) + "…).", 0, done);
+            return new Result(false, S.f(R.string.imp_wrong_exe, EXE_SHA256.substring(0, 12), h.substring(0, 12)), 0, done);
         }
         return null;
     }
 
     private Result finish(int n) throws IOException {
-        if (!installed(dest)) return new Result(false, "Unvollständig: Packs/TMTurbo.Title.Pack.Gbx fehlt.", n, done);
+        if (!installed(dest)) return new Result(false, S.t(R.string.imp_incomplete), n, done);
         File exe = new File(dest, "TrackmaniaTurbo.exe");
         if (!EXE_SHA256.equals(sha256(exe))) return checkExe();
         try (FileOutputStream o = new FileOutputStream(new File(dest, MARKER))) {
             o.write(("sha256=" + EXE_SHA256 + "\nfiles=" + n + "\nbytes=" + done + "\n").getBytes("UTF-8"));
         }
-        return new Result(true, String.format(Locale.ROOT, "Spieldaten importiert: %d Dateien, %.1f GB.", n, done / 1e9), n, done);
+        return new Result(true, S.f(R.string.imp_done, n, done / 1e9), n, done);
     }
 }

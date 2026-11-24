@@ -1,7 +1,5 @@
 # Trackmania Turbo – Android-Port (zum Selberbauen)
 
-<p align="center"><img src="docs/images/banner.jpg" alt="Trackmania Turbo Android port" width="100%"></p>
-
 Die PC-Version von **Trackmania Turbo** als native Android-App (arm64), offline spielbar.
 Der Port ist eine **statische Rekompilierung**: der x86-Code der `TrackmaniaTurbo.exe` wird in
 C übersetzt und für ARM64 kompiliert; eine eigene Windows-Laufzeit ersetzt
@@ -93,6 +91,9 @@ danach die Spieldaten neu importieren.
 ## Was geht
 
 - Kampagne, alle Menüs, Musik und Sound, Replays/Ghosts, Spielstand bleibt gespeichert.
+- Den Startbildschirm der App gibt es auf **Deutsch, Englisch, Französisch, Spanisch und
+  Italienisch**: er folgt der Systemsprache, oder Einstellungen → Sprache. Das Spiel selbst läuft
+  auf Englisch.
 - **Steuerung:** eingebauter oder Bluetooth-Controller, bis zu 4 gleichzeitig, Vibration.
   **Touch-Gamepad** (Stick, Gas, Bremse, A/B/Y/☰) automatisch ohne Controller;
   Einstellung „Touch-Steuerung“: automatisch / immer / aus.
